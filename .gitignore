@@ -1,0 +1,74 @@
+# ──────────────────────────────────────────────────────────
+# SECRETS — Never commit real environment files
+# ──────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# .env.example files ARE committed (they are templates)
+!.env.example
+!**/.env.example
+
+# Android secrets — never commit the real key
+app/android/app/src/main/res/values/secrets.xml
+
+
+# ──────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+.mypy_cache/
+.pytest_cache/
+
+# ──────────────────────────────────────────────────────────
+# Node / JavaScript
+# ──────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+*.tsbuildinfo
+
+# Build outputs
+dist/
+.next/
+out/
+.expo/
+.expo-shared/
+
+# ──────────────────────────────────────────────────────────
+# OS / Editor
+# ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ──────────────────────────────────────────────────────────
+# Runtime / Data
+# ──────────────────────────────────────────────────────────
+/backend-disaster/disaster_prediction.db
+uploads/
+outputs/
+*.log
+
+# ──────────────────────────────────────────────────────────
+# Docker
+# ──────────────────────────────────────────────────────────
+.dockerignore
