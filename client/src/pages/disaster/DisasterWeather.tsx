@@ -82,7 +82,7 @@ export default function DisasterWeather() {
         <Typography variant="body2" sx={{ color: '#94A3B8' }}>Live atmospheric conditions — {cityConfig?.display_name || selectedCity}</Typography>
       </Box>
       <Grid container spacing={2.5}>
-        <Grid item xs={12} md={5} lg={4}>
+        <Grid size={{ xs: 12, md: 5, lg: 4 }}>
           <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -102,10 +102,10 @@ export default function DisasterWeather() {
               </Box>
               <Divider sx={{ mb: 2, borderColor: 'rgba(255,255,255,0.06)' }} />
               <Grid container spacing={1}>
-                <Grid item xs={6}><StatCard icon={<Opacity />} label="Humidity" value={weatherData?.humidity || 0} unit="%" color="#74B9FF" /></Grid>
-                <Grid item xs={6}><StatCard icon={<Air />} label="Wind" value={weatherData?.wind_speed || 0} unit="m/s" color="#2ED573" /></Grid>
-                <Grid item xs={6}><StatCard icon={<Visibility />} label="Visibility" value={Math.round(((weatherData?.visibility || 10000) / 1000) * 10) / 10} unit="km" color="#FFD700" /></Grid>
-                <Grid item xs={6}><StatCard icon={<Thermostat />} label="Wind Dir" value={weatherData?.wind_direction ?? '—'} unit="°" color="#c4b5fd" /></Grid>
+                <Grid size={{ xs: 6 }}><StatCard icon={<Opacity />} label="Humidity" value={weatherData?.humidity || 0} unit="%" color="#74B9FF" /></Grid>
+                <Grid size={{ xs: 6 }}><StatCard icon={<Air />} label="Wind" value={weatherData?.wind_speed || 0} unit="m/s" color="#2ED573" /></Grid>
+                <Grid size={{ xs: 6 }}><StatCard icon={<Visibility />} label="Visibility" value={Math.round(((weatherData?.visibility || 10000) / 1000) * 10) / 10} unit="km" color="#FFD700" /></Grid>
+                <Grid size={{ xs: 6 }}><StatCard icon={<Thermostat />} label="Wind Dir" value={weatherData?.wind_direction ?? '—'} unit="°" color="#c4b5fd" /></Grid>
               </Grid>
               {weatherData?.data_source && (
                 <Box sx={{ mt: 2 }}>
@@ -116,10 +116,10 @@ export default function DisasterWeather() {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={7} lg={8}>
+        <Grid size={{ xs: 12, md: 7, lg: 8 }}>
           <Card sx={{ height: 380, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
             <MapContainer center={[coords[0] || mapCenter[0], coords[1] || mapCenter[1]]} zoom={12} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
               <CircleMarker center={[coords[0] || mapCenter[0], coords[1] || mapCenter[1]]} radius={20} pathOptions={{ color: weatherColor, fillColor: weatherColor, fillOpacity: 0.25, weight: 2 }}>
                 <LeafletTooltip permanent><span style={{ fontSize: '12px', fontWeight: 700 }}>{Math.round(weatherData?.temperature ?? 0)}°C · {desc}</span></LeafletTooltip>
                 <Popup><strong>{weatherData?.location || cityConfig?.name}</strong><br />Temp: {Math.round(weatherData?.temperature ?? 0)}°C<br />Humidity: {weatherData?.humidity}%</Popup>
@@ -128,7 +128,7 @@ export default function DisasterWeather() {
           </Card>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>5-Day Forecast</Typography>
@@ -143,7 +143,7 @@ export default function DisasterWeather() {
                   const dayDesc = dayForecasts[Math.floor(dayForecasts.length / 2)]?.description || '';
                   const color = getWeatherColor(dayDesc);
                   return (
-                    <Grid item xs={12} sm={6} md={2.4} key={day}>
+                    <Grid key={day} size={{ xs: 12, sm: 6, md: 2.4 }}>
                       <Box sx={{ p: 2, borderRadius: 2, background: 'rgba(255,255,255,0.03)', border: `1px solid ${color}30`, textAlign: 'center', height: '100%' }}>
                         <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', mb: 1 }}>{day}</Typography>
                         <Box sx={{ color, display: 'flex', justifyContent: 'center', mb: 1 }}>{WEATHER_ICONS[dayDesc.toLowerCase()] || <WbSunny sx={{ color: '#FFD700' }} />}</Box>
@@ -165,7 +165,7 @@ export default function DisasterWeather() {
         </Grid>
 
         {forecastData?.forecasts?.length > 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Next 24-Hour Breakdown</Typography>

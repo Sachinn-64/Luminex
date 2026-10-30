@@ -56,6 +56,25 @@ const VOICE_NAMES = {
   japanese: "ja-JP-Wavenet-A"
 } as const;
 
+/** Gemini TTS models to try, in order (official API, same key as the chat model). */
+const GEMINI_TTS_MODELS = ["gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"];
+const GEMINI_TTS_VOICE = "Kore";
+
+/** Wrap raw 16-bit PCM (what Gemini TTS returns) in a WAV header so <audio> can play it. */
+function pcmToWavUrl(base64: string, sampleRate: number): string {
+  const bin = atob(base64);
+  const pcm = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+  const header = new ArrayBuffer(44);
+  const v = new DataView(header);
+  const str = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + pcm.length, true); str(8, "WAVE");
+  str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, pcm.length, true);
+  return URL.createObjectURL(new Blob([header, pcm], { type: "audio/wav" }));
+}
+
 const STT_LANG_CODES = {
   english: "en-US",
   spanish: "es-ES",
@@ -83,6 +102,10 @@ const ChatbotPopup = forwardRef<ChatbotPopupRef, object>((_props, ref) => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechTokenRef = useRef(0); // bumped on stop/new speech so chunked playback aborts
+  const ttsBlockedRef = useRef(false);
+  const geminiTtsBlockedRef = useRef(false); // set once Google TTS rejects the key; browser voice is used from then on
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -105,6 +128,19 @@ const ChatbotPopup = forwardRef<ChatbotPopupRef, object>((_props, ref) => {
   const toggleMinimize = () => {
     setIsMinimized(!isMinimized);
   };
+
+  // Chrome populates speechSynthesis voices asynchronously; prime them so the first reply picks the right voice.
+  useEffect(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const prime = () => synth.getVoices();
+    prime();
+    synth.addEventListener("voiceschanged", prime);
+    return () => {
+      synth.removeEventListener("voiceschanged", prime);
+      synth.cancel();
+    };
+  }, []);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -445,54 +481,176 @@ CRITICAL: Your ENTIRE response must be in ${language} language only. Do not mix 
       .trim();
   };
 
-  const speak = async (text: string) => {
-    try {
-      setIsSpeaking(true);
-      const cleanText = stripMarkdown(text);
-      const ttsResponse = await fetch(
-        `${GOOGLE_TTS_URL}?key=${GOOGLE_CLOUD_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: { text: cleanText },
-            voice: {
-              languageCode: VOICE_LANG_CODES[language],
-              name: VOICE_NAMES[language],
-            },
-            audioConfig: { audioEncoding: "MP3" },
-          }),
-        },
-      );
-      const ttsData = await ttsResponse.json();
-      if (ttsData?.audioContent) {
-        const audio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
-        setCurrentAudio(audio);
-        
-        audio.onended = () => {
-          setIsSpeaking(false);
-          setCurrentAudio(null);
-        };
-        
-        audio.onerror = () => {
-          setIsSpeaking(false);
-          setCurrentAudio(null);
-        };
-        
-        await audio.play();
+  const findBrowserVoice = (lang: string) => {
+    const synth = window.speechSynthesis;
+    if (!synth) return null;
+    const voices = synth.getVoices();
+    const norm = (v: string) => v.replace("_", "-").toLowerCase();
+    const base = lang.split("-")[0].toLowerCase();
+    return (
+      voices.find((v) => norm(v.lang) === lang.toLowerCase() && /google|natural|premium|enhanced/i.test(v.name)) ||
+      voices.find((v) => norm(v.lang) === lang.toLowerCase()) ||
+      voices.find((v) => norm(v.lang).startsWith(base)) ||
+      null
+    );
+  };
+
+  /** Browser-native voice (Web Speech API). `voice` null = let the browser pick a default. */
+  const speakWithBrowser = (text: string, voice: SpeechSynthesisVoice | null) =>
+    new Promise<void>((resolve) => {
+      const synth = window.speechSynthesis;
+      if (!synth) {
+        console.warn("[Luminex] This browser has no speech synthesis; reply not spoken.");
+        setIsSpeaking(false);
+        return resolve();
       }
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = VOICE_LANG_CODES[language];
+      if (voice) utterance.voice = voice;
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      const done = () => {
+        if (utteranceRef.current === utterance) utteranceRef.current = null;
+        setIsSpeaking(false);
+        resolve();
+      };
+      utterance.onend = done;
+      utterance.onerror = done;
+      utteranceRef.current = utterance;
+      synth.speak(utterance);
+    });
+
+  /** Play one audio URL/data URI; resolves when finished, stopped, or failed. Returns false on failure. */
+  const playAudio = (src: string, token: number) =>
+    new Promise<boolean>((resolve) => {
+      if (speechTokenRef.current !== token) return resolve(false);
+      const audio = new Audio(src);
+      setCurrentAudio(audio);
+      let ok = true;
+      const done = () => {
+        setCurrentAudio((cur) => (cur === audio ? null : cur));
+        resolve(ok);
+      };
+      audio.onended = done;
+      audio.onerror = () => {
+        ok = false;
+        done();
+      };
+      audio.play().catch((err) => {
+        console.warn("[Luminex] Audio playback blocked:", err);
+        ok = false;
+        done();
+      });
+    });
+
+  /**
+   * Gemini text-to-speech (official API, uses the same key as the chat model).
+   * Detects the language from the text itself, so Marathi/Hindi/Bengali/Tamil/Japanese just work.
+   */
+  const speakWithGemini = async (text: string, token: number): Promise<boolean> => {
+    if (!GEMINI_API_KEY || geminiTtsBlockedRef.current) return false;
+    for (const model of GEMINI_TTS_MODELS) {
+      if (speechTokenRef.current !== token) return true;
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text }] }],
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_TTS_VOICE } } },
+              },
+            }),
+          },
+        );
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          // 429 = quota; try the next model, don't give up on Gemini TTS for the session.
+          if (res.status !== 429 && res.status !== 404 && res.status !== 503) geminiTtsBlockedRef.current = true;
+          console.warn(`[Luminex] Gemini TTS (${model}) failed:`, data?.error?.message || `HTTP ${res.status}`);
+          continue;
+        }
+        const part = data?.candidates?.[0]?.content?.parts?.find((p: { inlineData?: { data: string; mimeType: string } }) => p.inlineData);
+        if (!part?.inlineData?.data) continue;
+        const mime: string = part.inlineData.mimeType || "";
+        const rate = Number(/rate=(\d+)/.exec(mime)?.[1] || 24000);
+        const src = /L16|pcm/i.test(mime) ? pcmToWavUrl(part.inlineData.data, rate) : `data:${mime};base64,${part.inlineData.data}`;
+        const ok = await playAudio(src, token);
+        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+        return ok;
+      } catch (err) {
+        console.warn(`[Luminex] Gemini TTS (${model}) error:`, err);
+      }
+    }
+    return false;
+  };
+
+  /** Google Cloud TTS. Returns false when the key is missing/blocked so the caller can fall back. */
+  const speakWithGoogle = async (text: string, token: number): Promise<boolean> => {
+    if (!GOOGLE_CLOUD_API_KEY || ttsBlockedRef.current) return false;
+    const ttsResponse = await fetch(`${GOOGLE_TTS_URL}?key=${GOOGLE_CLOUD_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: { text },
+        voice: { languageCode: VOICE_LANG_CODES[language], name: VOICE_NAMES[language] },
+        audioConfig: { audioEncoding: "MP3" },
+      }),
+    });
+    const ttsData = await ttsResponse.json().catch(() => null);
+    if (!ttsResponse.ok || !ttsData?.audioContent) {
+      ttsBlockedRef.current = true;
+      console.warn(
+        "[Luminex] Google Cloud Text-to-Speech unavailable, falling back:",
+        ttsData?.error?.message || `HTTP ${ttsResponse.status}`,
+      );
+      return false;
+    }
+    return playAudio("data:audio/mp3;base64," + ttsData.audioContent, token);
+  };
+
+  /**
+   * Speak a reply in the selected language. Order of preference:
+   * 1. Google Cloud TTS (needs an enabled key)
+   * 2. Gemini TTS (official, same key as chat; covers Indian languages most devices lack)
+   * 3. A system voice that matches the language
+   * 4. Whatever default voice the browser has
+   */
+  const speak = async (text: string) => {
+    const cleanText = stripMarkdown(text);
+    if (!cleanText) return;
+    const token = ++speechTokenRef.current;
+    setIsSpeaking(true);
+    try {
+      if (await speakWithGoogle(cleanText, token)) return;
+      if (speechTokenRef.current !== token) return;
+      if (await speakWithGemini(cleanText, token)) return;
+      if (speechTokenRef.current !== token) return;
+      const voice = findBrowserVoice(VOICE_LANG_CODES[language]);
+      if (!voice) console.warn(`[Luminex] No ${language} system voice installed; using the browser default voice.`);
+      await speakWithBrowser(cleanText, voice);
     } catch (err) {
       console.error("TTS Error:", err);
-      setIsSpeaking(false);
       setCurrentAudio(null);
+    } finally {
+      if (speechTokenRef.current === token) setIsSpeaking(false);
     }
   };
 
   const stopSpeaking = () => {
+    speechTokenRef.current += 1;
     if (currentAudio) {
       currentAudio.pause();
       currentAudio.currentTime = 0;
       setCurrentAudio(null);
+    }
+    if (window.speechSynthesis) {
+      utteranceRef.current = null;
+      window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
   };
@@ -582,15 +740,16 @@ CRITICAL: Your ENTIRE response must be in ${language} language only. Do not mix 
     setChat((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
+    let reply: string | null = null;
     try {
-      const reply = await getGeminiReply(input);
-      const botMessage: ChatMessage = { sender: "bot", text: reply };
-      setChat((prev) => [...prev, botMessage]);
-      await speak(reply);
+      reply = await getGeminiReply(input);
+      setChat((prev) => [...prev, { sender: "bot", text: reply as string }]);
     } catch (err) {
       console.error(err);
     }
+    // Unlock the composer before speaking so the stop button (and typing) work while audio plays.
     setLoading(false);
+    if (reply) void speak(reply);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -822,7 +981,7 @@ CRITICAL: Your ENTIRE response must be in ${language} language only. Do not mix 
                       />
                       <button
                         onClick={toggleVoice}
-                        disabled={loading}
+                        disabled={loading && !isSpeaking}
                         aria-label={isListening ? 'Stop listening' : isSpeaking ? 'Stop speaking' : 'Voice chat'}
                         className={cn(
                           'relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors',

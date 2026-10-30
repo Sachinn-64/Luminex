@@ -54,7 +54,7 @@ export default function DisasterEarthquake() {
           { label: 'Max Magnitude', value: maxMag.toFixed(1) || '—', color: maxMag >= 5 ? '#FF4757' : '#2ED573', icon: <TrendingUp /> },
           { label: 'Tsunami Alerts', value: tsunamiRisk, color: tsunamiRisk > 0 ? '#FF4757' : '#2ED573', icon: <Layers /> },
         ].map(({ label, value, color, icon }) => (
-          <Grid item xs={6} md={3} key={label}>
+          <Grid key={label} size={{ xs: 6, md: 3 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent sx={{ py: 2.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><Box sx={{ color }}>{icon}</Box><Typography variant="caption" sx={{ color: '#94A3B8' }}>{label}</Typography></Box>
@@ -66,10 +66,10 @@ export default function DisasterEarthquake() {
       </Grid>
 
       <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <Card sx={{ height: 440, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
             <MapContainer center={mapCenter} zoom={6} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
               <CircleMarker center={mapCenter} radius={10} pathOptions={{ color: '#c4b5fd', fillColor: '#c4b5fd', fillOpacity: 0.4, weight: 2 }}>
                 <LeafletTooltip permanent><span style={{ fontSize: '11px', fontWeight: 700 }}>{cityConfig?.name || 'City'}</span></LeafletTooltip>
               </CircleMarker>
@@ -92,7 +92,7 @@ export default function DisasterEarthquake() {
           </Box>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent>
               <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Seismic Risk Assessment</Typography>
@@ -129,7 +129,7 @@ export default function DisasterEarthquake() {
         </Grid>
 
         {quakes.length > 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Recent Earthquakes ({quakes.length})</Typography>

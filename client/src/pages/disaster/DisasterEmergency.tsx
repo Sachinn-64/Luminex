@@ -1,177 +1,269 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Marker, Polyline, Popup } from 'react-leaflet';
 import {
-  Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, Button, Chip,
-} from '@mui/material';
-import {
-  Phone as PhoneIcon, LocationOn as LocationIcon, Shield as ShieldIcon,
-  LocalHospital as HospitalIcon, LocalPolice as PoliceIcon, Warning as WarningIcon,
-} from '@mui/icons-material';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
-import L from 'leaflet';
+  Flame, HeartPulse, MapPin, Megaphone, Phone, Route, Shield, ShieldAlert, Siren, Users, type LucideIcon,
+} from 'lucide-react';
 import { useDisasterData } from '../../context/DisasterDataContext';
-import 'leaflet/dist/leaflet.css';
+import { EmptyState, ErrorBanner, Mono, PageHeader, Panel, PanelHeader, Pill, Rows, Spinner } from '../../components/disaster/ui';
+import { tint } from '../../components/disaster/tokens';
+import { MapChip, MapFrame } from '../../components/disaster/map';
+import { parseCoords, pinIcon } from '../../components/disaster/mapUtils';
 
-// Fix leaflet default icon for Vite
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
+const assemblyIcon = pinIcon('#10b981', '🏟');
 
-const makeIcon = (color: string, emoji: string) => L.divIcon({
-  html: `<div style="width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:12px;">${emoji}</span></div>`,
-  className: '', iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -32],
-});
-
-const assemblyIcon = makeIcon('#2ED573', '🏟');
-const routeColors: Record<string, string> = { primary: '#c4b5fd', emergency: '#FF4757', secondary: '#818CF8' };
-
-const CATEGORY_ICONS: Record<string, React.ReactElement> = {
-  medical: <HospitalIcon sx={{ fontSize: 18, color: '#FF4757' }} />,
-  law_enforcement: <PoliceIcon sx={{ fontSize: 18, color: '#818CF8' }} />,
-  fire: <WarningIcon sx={{ fontSize: 18, color: '#FFA502' }} />,
-  disaster: <ShieldIcon sx={{ fontSize: 18, color: '#c4b5fd' }} />,
-  kumbh: <LocationIcon sx={{ fontSize: 18, color: '#2ED573' }} />,
+const ROUTE_META: Record<string, { color: string; label: string }> = {
+  primary: { color: '#60a5fa', label: 'Primary route' },
+  emergency: { color: '#ef4444', label: 'Emergency route' },
+  secondary: { color: '#a78bfa', label: 'Secondary route' },
 };
+const routeMeta = (t?: string) => ROUTE_META[t || ''] || { color: '#94a3b8', label: 'Route' };
+
+const CATEGORY_META: Record<string, { icon: LucideIcon; color: string; label: string }> = {
+  disaster: { icon: ShieldAlert, color: '#a78bfa', label: 'Disaster' },
+  fire: { icon: Flame, color: '#f59e0b', label: 'Fire' },
+  law_enforcement: { icon: Shield, color: '#60a5fa', label: 'Law enforcement' },
+  medical: { icon: HeartPulse, color: '#ef4444', label: 'Medical' },
+  women_safety: { icon: Phone, color: '#ec4899', label: 'Women safety' },
+  kumbh: { icon: MapPin, color: '#10b981', label: 'Event control' },
+};
+const catMeta = (c: string) => CATEGORY_META[c] || { icon: Phone, color: '#94a3b8', label: c.replace(/_/g, ' ') };
+
+const PROCEDURES = [
+  { step: '01', title: 'Immediate response', desc: 'Activate protocols, alert the control room and deploy the nearest response teams.', icon: Siren, color: '#ef4444' },
+  { step: '02', title: 'Evacuation', desc: 'Open the designated routes and move crowds toward the closest assembly points.', icon: Route, color: '#f59e0b' },
+  { step: '03', title: 'Communication', desc: 'Contact emergency services and broadcast public announcements in every language.', icon: Megaphone, color: '#10b981' },
+];
 
 export default function DisasterEmergency() {
   const { fetchEmergencyContacts, fetchEvacuationRoutes, fetchAssemblyPoints, availableCities, selectedCity } = useDisasterData();
-  const [contacts, setContacts] = useState<any>(null);
-  const [routes, setRoutes] = useState<any>(null);
-  const [assemblyPoints, setAssemblyPoints] = useState<any>(null);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [points, setPoints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const cityConfig = availableCities.find(c => c.id === selectedCity) || availableCities[0];
+  const city = availableCities.find((c) => c.id === selectedCity) || availableCities[0];
 
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+    (async () => {
       try {
         setLoading(true);
-        const [c, r, p] = await Promise.all([fetchEmergencyContacts(), fetchEvacuationRoutes(), fetchAssemblyPoints()]);
-        setContacts(c); setRoutes(r); setAssemblyPoints(p);
-      } catch { setError('Failed to load emergency data.'); } finally { setLoading(false); }
+        const [c, r, p]: any[] = await Promise.all([fetchEmergencyContacts(), fetchEvacuationRoutes(), fetchAssemblyPoints()]);
+        if (cancelled) return;
+        setContacts(Array.isArray(c) ? c : c?.contacts || []);
+        setRoutes(r?.all_routes || []);
+        setPoints(p?.assembly_points || []);
+        setError(null);
+      } catch {
+        if (!cancelled) setError('Could not load emergency data from the disaster backend (port 5001).');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    load();
   }, [fetchEmergencyContacts, fetchEvacuationRoutes, fetchAssemblyPoints]);
 
-  if (loading) return <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}><CircularProgress sx={{ color: '#c4b5fd' }} /></Box>;
-  if (error) return <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>;
+  const parsedRoutes = useMemo(() => routes.map((r) => ({ ...r, coords: parseCoords(r.coordinates) })), [routes]);
+  const grouped = useMemo(
+    () =>
+      contacts.reduce<Record<string, any[]>>((acc, c) => {
+        const k = c.category || 'general';
+        (acc[k] ||= []).push(c);
+        return acc;
+      }, {}),
+    [contacts],
+  );
+  const openRoutes = routes.filter((r) => r.status === 'open').length;
+  const totalCapacity = points.reduce((s, p) => s + (p.capacity || 0), 0);
 
-  const groupedContacts = (contacts || []).reduce((acc: any, c: any) => { const cat = c.category || 'general'; if (!acc[cat]) acc[cat] = []; acc[cat].push(c); return acc; }, {} as Record<string, any[]>);
-  const allRoutes = routes?.all_routes || [];
-  const points = assemblyPoints?.assembly_points || [];
+  if (loading) return <Spinner label="Loading evacuation plan" />;
+  if (error) return <ErrorBanner>{error}</ErrorBanner>;
 
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}><Typography variant="h5" sx={{ fontWeight: 800, color: '#F0F4FF' }}>Emergency Response</Typography><Typography variant="body2" sx={{ color: '#475569' }}>Assembly points, evacuation routes, and emergency contacts</Typography></Box>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Evacuation"
+        title="Emergency response"
+        description="Assembly points, evacuation corridors and the emergency contacts the control room relies on."
+        action={
+          <>
+            <Pill color="#10b981">{openRoutes}/{routes.length} routes open</Pill>
+            <Pill color="#22d3ee" dot={false}>{points.length} assembly points · {totalCapacity.toLocaleString()} capacity</Pill>
+          </>
+        }
+      />
 
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <Card sx={{ height: 420, overflow: 'hidden', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <Box sx={{ height: '100%', position: 'relative' }}>
-              <Box sx={{ position: 'absolute', bottom: 12, left: 12, zIndex: 1000, background: 'rgba(11,15,26,0.9)', backdropFilter: 'blur(8px)', border: '1px solid rgba(196,181,253,0.2)', borderRadius: 2, p: 1.5 }}>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, display: 'block', mb: 0.5 }}>LEGEND</Typography>
-                {[{ color: '#2ED573', label: 'Assembly Point' }, { color: '#c4b5fd', label: 'Primary Route' }, { color: '#FF4757', label: 'Emergency Route' }, { color: '#818CF8', label: 'Secondary Route' }].map(({ color, label }) => (
-                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}><Box sx={{ width: 12, height: 4, borderRadius: 2, background: color }} /><Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.65rem' }}>{label}</Typography></Box>
-                ))}
-              </Box>
-              <MapContainer center={[cityConfig.lat, cityConfig.lon]} zoom={cityConfig.zoom || 13} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
-                {points.filter((p: any) => p.coordinates?.length >= 2).map((pt: any) => (
-                  <Marker key={pt.id} position={[pt.coordinates[0], pt.coordinates[1]]} icon={assemblyIcon}>
-                    <Popup><strong>{pt.name}</strong><br />Capacity: {pt.capacity?.toLocaleString()}<br /><span style={{ color: '#2ED573' }}>ACTIVE</span></Popup>
-                  </Marker>
-                ))}
-                {allRoutes.map((route: any) => {
-                  const coords = Array.isArray(route.coordinates) ? route.coordinates : [];
-                  if (coords.length < 2) return null;
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {/* left column */}
+        <div className="space-y-4">
+          <MapFrame
+            center={[city.lat, city.lon]}
+            zoom={city.zoom || 14}
+            height={460}
+            overlay={
+              <div className="pointer-events-none absolute bottom-3 left-3 z-[1000]">
+                <MapChip>
+                  <Mono className="mb-1.5 block text-white/70">Legend</Mono>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-[11.5px] text-white/80"><span className="size-2.5 rounded-full bg-emerald-400" /> Assembly point</div>
+                    {Object.values(ROUTE_META).map((m) => (
+                      <div key={m.label} className="flex items-center gap-2 text-[11.5px] text-white/80">
+                        <span className="h-[3px] w-4 rounded-full" style={{ background: m.color }} /> {m.label}
+                      </div>
+                    ))}
+                  </div>
+                </MapChip>
+              </div>
+            }
+          >
+            {points.filter((p) => p.coordinates?.length >= 2).map((p) => (
+              <Marker key={p.id} position={[p.coordinates[0], p.coordinates[1]]} icon={assemblyIcon}>
+                <Popup>
+                  <strong>{p.name}</strong>
+                  <br />Capacity {p.capacity?.toLocaleString()} · <span style={{ color: '#10b981' }}>{String(p.status || 'active').toUpperCase()}</span>
+                </Popup>
+              </Marker>
+            ))}
+            {parsedRoutes.filter((r) => r.coords.length >= 2).map((r) => {
+              const m = routeMeta(r.route_type);
+              return (
+                <Polyline
+                  key={r.id}
+                  positions={r.coords}
+                  pathOptions={{ color: m.color, weight: 4, opacity: r.status === 'open' ? 0.9 : 0.45, dashArray: r.route_type === 'secondary' ? '7,5' : undefined }}
+                >
+                  <Popup>
+                    <strong>{r.name}</strong>
+                    <br />{m.label} · capacity {r.capacity?.toLocaleString()}
+                    <br /><span style={{ color: r.status === 'open' ? '#10b981' : '#ef4444', fontWeight: 700 }}>{String(r.status).toUpperCase()}</span>
+                  </Popup>
+                </Polyline>
+              );
+            })}
+          </MapFrame>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel>
+              <PanelHeader title="Evacuation routes" meta={`${routes.length} corridors configured`} />
+              {routes.length === 0 ? (
+                <EmptyState icon={Route} title="No routes configured" />
+              ) : (
+                <Rows>
+                  {routes.map((r) => {
+                    const m = routeMeta(r.route_type);
+                    const open = r.status === 'open';
+                    return (
+                      <div key={r.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                        <span className="mt-1 h-10 w-[3px] shrink-0 rounded-full" style={{ background: m.color }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="text-[13px] font-semibold leading-snug">{r.name}</div>
+                            <Pill color={open ? '#10b981' : '#ef4444'}>{r.status}</Pill>
+                          </div>
+                          <div className="mt-1 text-[12px] text-muted-foreground">{r.description}</div>
+                          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            {m.label} · capacity {r.capacity?.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Rows>
+              )}
+            </Panel>
+
+            <Panel>
+              <PanelHeader title="Assembly points" meta={`${totalCapacity.toLocaleString()} people total`} />
+              {points.length === 0 ? (
+                <EmptyState icon={Users} title="No assembly points" />
+              ) : (
+                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                  {points.map((p) => (
+                    <div key={p.id} className="rounded-xl border border-emerald-400/20 bg-emerald-500/[0.07] p-3.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[13px] font-semibold leading-snug">{p.name}</div>
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Users size={13} /></span>
+                      </div>
+                      <div className="mt-2 text-[12.5px] font-medium text-emerald-400">{p.capacity?.toLocaleString()} people</div>
+                      {p.coordinates && (
+                        <div className="mt-0.5 font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+                          {Number(p.coordinates[0]).toFixed(4)}, {Number(p.coordinates[1]).toFixed(4)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
+        </div>
+
+        {/* right column */}
+        <div className="space-y-4">
+          <Panel>
+            <PanelHeader title="Emergency contacts" meta="Tap a number to call" />
+            {Object.keys(grouped).length === 0 ? (
+              <EmptyState icon={Phone} title="No contacts" />
+            ) : (
+              <div className="space-y-5">
+                {Object.entries(grouped).map(([cat, items]) => {
+                  const m = catMeta(cat);
                   return (
-                    <Polyline key={route.id} positions={coords.map((c: number[]) => [c[0], c[1]])} pathOptions={{ color: routeColors[route.route_type] || '#818CF8', weight: 4, opacity: 0.85, dashArray: route.route_type === 'secondary' ? '6,4' : undefined }}>
-                      <Popup><strong>{route.name}</strong><br />Type: {route.route_type}<br />Capacity: {route.capacity?.toLocaleString()} people<br /><span style={{ color: route.status === 'open' ? '#2ED573' : '#FF4757' }}>{route.status?.toUpperCase()}</span></Popup>
-                    </Polyline>
+                    <div key={cat}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="flex size-6 items-center justify-center rounded-md" style={{ color: m.color, background: tint(m.color, 0.14) }}>
+                          <m.icon size={12} />
+                        </span>
+                        <Mono>{m.label}</Mono>
+                      </div>
+                      <Rows>
+                        {items.map((c) => (
+                          <div key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+                            <div className="min-w-0">
+                              <div className="text-[13px] font-medium leading-snug">{c.service_name}</div>
+                              <div className="text-[11.5px] text-muted-foreground">{c.description}</div>
+                            </div>
+                            <a
+                              href={`tel:${c.phone_number}`}
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.04em] transition-colors hover:bg-foreground/[0.06]"
+                              style={{ color: m.color, borderColor: tint(m.color, 0.35) }}
+                            >
+                              <Phone size={11} /> {c.phone_number}
+                            </a>
+                          </div>
+                        ))}
+                      </Rows>
+                    </div>
                   );
                 })}
-              </MapContainer>
-            </Box>
-          </Card>
-        </Grid>
+              </div>
+            )}
+          </Panel>
 
-        <Grid item xs={12} md={5}>
-          <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <CardContent>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1.5 }}>Emergency Contacts</Typography>
-              {Object.entries(groupedContacts).map(([category, items]) => (
-                <Box key={category} sx={{ mb: 1.5 }}>
-                  <Chip label={category.replace('_', ' ').toUpperCase()} size="small" sx={{ mb: 0.75, height: 18, fontSize: '0.6rem', fontWeight: 700, background: 'rgba(196,181,253,0.12)', color: '#c4b5fd', border: '1px solid rgba(196,181,253,0.25)' }} />
-                  {(items as any[]).map((contact: any) => (
-                    <Box key={contact.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      {CATEGORY_ICONS[contact.category] || <PhoneIcon sx={{ fontSize: 18, color: '#94A3B8' }} />}
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#F0F4FF', fontSize: '0.8rem' }}>{contact.service_name}</Typography>
-                        <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.7rem' }}>{contact.description}</Typography>
-                      </Box>
-                      <Button variant="outlined" size="small" href={`tel:${contact.phone_number}`} sx={{ fontSize: '0.7rem', py: 0.25, px: 1, minWidth: 0, borderColor: 'rgba(255,71,87,0.4)', color: '#FF4757', '&:hover': { borderColor: '#FF4757', background: 'rgba(255,71,87,0.08)' } }}>{contact.phone_number}</Button>
-                    </Box>
-                  ))}
-                </Box>
+          <Panel>
+            <PanelHeader title="Emergency procedures" />
+            <ol className="space-y-3">
+              {PROCEDURES.map((p) => (
+                <li key={p.step} className="flex gap-3 rounded-xl border border-border/60 bg-background/40 p-3 dark:border-white/[0.06]">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border" style={{ color: p.color, borderColor: tint(p.color, 0.3), background: tint(p.color, 0.12) }}>
+                    <p.icon size={15} />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Mono style={{ color: p.color }} className="!text-current">{p.step}</Mono>
+                      <span className="text-[13px] font-semibold">{p.title}</span>
+                    </div>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{p.desc}</p>
+                  </div>
+                </li>
               ))}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={7}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
-            <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-              <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1 }}>Evacuation Routes</Typography>
-                {allRoutes.map((route: any) => (
-                  <Box key={route.id} sx={{ display: 'flex', gap: 1.5, py: 0.75, alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.04)', '&:last-child': { borderBottom: 'none' } }}>
-                    <Box sx={{ width: 4, borderRadius: 2, alignSelf: 'stretch', flexShrink: 0, background: routeColors[route.route_type] || '#818CF8' }} />
-                    <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#F0F4FF', fontSize: '0.8rem' }}>{route.name}</Typography>
-                        <Chip label={route.status} size="small" sx={{ height: 16, fontSize: '0.58rem', fontWeight: 700, flexShrink: 0, background: route.status === 'open' ? 'rgba(46,213,115,0.12)' : 'rgba(255,71,87,0.12)', color: route.status === 'open' ? '#2ED573' : '#FF4757', border: `1px solid ${route.status === 'open' ? 'rgba(46,213,115,0.25)' : 'rgba(255,71,87,0.25)'}` }} />
-                      </Box>
-                      <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.7rem' }}>Capacity: {route.capacity?.toLocaleString()} • {route.route_type} • {route.description}</Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-              <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1 }}>Assembly Points</Typography>
-                <Grid container spacing={1}>
-                  {points.map((point: any) => (
-                    <Grid item xs={6} key={point.id}>
-                      <Box sx={{ p: 1.25, borderRadius: 2, background: 'rgba(46,213,115,0.06)', border: '1px solid rgba(46,213,115,0.15)' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#F0F4FF', fontSize: '0.78rem' }}>{point.name}</Typography>
-                        <Typography variant="caption" sx={{ color: '#2ED573', fontWeight: 600, fontSize: '0.68rem' }}>Cap: {point.capacity?.toLocaleString()} people</Typography><br />
-                        <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.65rem' }}>{point.coordinates ? `${point.coordinates[0].toFixed(4)}, ${point.coordinates[1].toFixed(4)}` : ''}</Typography>
-                      </Box>
-                    </Grid>
-                  ))}
-                </Grid>
-              </CardContent>
-            </Card>
-
-            <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-              <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1 }}>Emergency Procedures</Typography>
-                {[{ step: '1', title: 'Immediate Response', desc: 'Activate emergency protocols and deploy response teams.', color: '#FF4757' }, { step: '2', title: 'Evacuation', desc: 'Direct crowds to designated evacuation routes shown on the map.', color: '#FFA502' }, { step: '3', title: 'Communication', desc: 'Contact emergency services and broadcast public announcements.', color: '#2ED573' }].map(({ step, title, desc, color }) => (
-                  <Box key={step} sx={{ display: 'flex', gap: 1.5, py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)', '&:last-child': { borderBottom: 'none' } }}>
-                    <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: `${color}20`, border: `1px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography variant="caption" sx={{ color, fontWeight: 800, fontSize: '0.7rem' }}>{step}</Typography></Box>
-                    <Box><Typography variant="body2" sx={{ fontWeight: 700, color: '#F0F4FF', fontSize: '0.78rem' }}>{title}</Typography><Typography variant="caption" sx={{ color: '#475569', fontSize: '0.7rem' }}>{desc}</Typography></Box>
-                  </Box>
-                ))}
-              </CardContent>
-            </Card>
-          </Box>
-        </Grid>
-      </Grid>
-    </Box>
+            </ol>
+          </Panel>
+        </div>
+      </div>
+    </div>
   );
 }

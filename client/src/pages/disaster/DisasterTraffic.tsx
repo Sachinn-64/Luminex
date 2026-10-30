@@ -54,7 +54,7 @@ export default function DisasterTraffic() {
           { label: 'High Congestion', value: highCongestion, color: highCongestion > 0 ? '#FF4757' : '#2ED573', icon: <Warning /> },
           { label: 'Avg Delay', value: `+${avgDelay} min`, color: avgDelay > 5 ? '#FFA502' : '#2ED573', icon: <Timer /> },
         ] as const).map(({ label, value, color, icon }) => (
-          <Grid item xs={6} md={3} key={label}>
+          <Grid key={label} size={{ xs: 6, md: 3 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent sx={{ py: 2.5 }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><Box sx={{ color }}>{icon}</Box><Typography variant="caption" sx={{ color: '#94A3B8' }}>{label}</Typography></Box><Typography variant="h5" sx={{ fontWeight: 800, color }}>{value}</Typography></CardContent>
             </Card>
@@ -63,10 +63,10 @@ export default function DisasterTraffic() {
       </Grid>
 
       <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <Card sx={{ height: 460, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
             <MapContainer center={mapCenter} zoom={cityConfig?.zoom || 13} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
               {routes.map((route: any) => {
                 if (!route.start_coords || !route.end_coords) return null;
                 const color = CONGESTION_COLOR[route.congestion_level] || '#94A3B8';
@@ -90,7 +90,7 @@ export default function DisasterTraffic() {
           </Box>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Card sx={{ height: 460, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent sx={{ pb: 1, flexShrink: 0 }}><Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF' }}>Route Status</Typography></CardContent>
             <Divider sx={{ borderColor: 'rgba(255,255,255,0.06)' }} />
@@ -117,7 +117,7 @@ export default function DisasterTraffic() {
           </Card>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>All Routes Summary</Typography>

@@ -127,8 +127,22 @@ function AppShell() {
             {import.meta.env.DEV && (
               <>
                 <Route path="/__preview/dashboard" element={<PreviewAuth><Dashboard /></PreviewAuth>} />
-                <Route path="/__preview/disaster-prediction" element={<PreviewAuth><DisasterDataProvider><div style={{ padding: '6rem 1.5rem 2rem' }}><DisasterPrediction /></div></DisasterDataProvider></PreviewAuth>} />
-                <Route path="/__preview/disaster-management" element={<PreviewAuth><DisasterDataProvider><div style={{ padding: '6rem 1.5rem 2rem' }}><DisasterManagement /></div></DisasterDataProvider></PreviewAuth>} />
+                <Route path="/__preview/disaster-prediction" element={<PreviewAuth><DisasterDataProvider><DisasterLayout /></DisasterDataProvider></PreviewAuth>}>
+                  <Route index element={<DisasterPrediction />} />
+                  <Route path="overview" element={<DisasterDashboard />} />
+                  <Route path="weather" element={<DisasterWeather />} />
+                  <Route path="earthquakes" element={<DisasterEarthquake />} />
+                  <Route path="crowd" element={<DisasterCrowd />} />
+                  <Route path="traffic" element={<DisasterTraffic />} />
+                  <Route path="satellite" element={<DisasterSatellite />} />
+                </Route>
+                <Route path="/__preview/disaster-management" element={<PreviewAuth><DisasterDataProvider><DisasterLayout /></DisasterDataProvider></PreviewAuth>}>
+                  <Route index element={<DisasterManagement />} />
+                  <Route path="overview" element={<DisasterDashboard />} />
+                  <Route path="alerts" element={<DisasterAlerts />} />
+                  <Route path="emergency" element={<DisasterEmergency />} />
+                  <Route path="pilgrim" element={<DisasterPilgrim />} />
+                </Route>
                 <Route path="/__preview/ai-map" element={<PreviewAuth><AIMap /></PreviewAuth>} />
               </>
             )}

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import {
-  Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, Chip, Divider, LinearProgress, Tabs, Tab,
+  Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, Divider, LinearProgress, Tabs, Tab,
 } from '@mui/material';
 import {
   Satellite, Water, Terrain, WaterDrop, Landscape, LocationCity, Park, Warning, CheckCircle, Info,
@@ -14,7 +14,7 @@ const { BaseLayer, Overlay } = LayersControl;
 const RISK_COLORS: Record<string, string> = { high: '#FF4757', moderate: '#FFA502', low: '#2ED573' };
 const ESRI_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const ESRI_LABELS = 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
-const CARTO_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const CARTO_DARK = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ESRI_TOPO = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
 const GOOGLE_SATELLITE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
 const GOOGLE_HYBRID = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
@@ -68,7 +68,7 @@ export default function DisasterSatellite() {
       {/* Tab 0: Satellite */}
       {activeTab === 0 && (
         <Grid container spacing={2.5}>
-          <Grid item xs={12} lg={8}>
+          <Grid size={{ xs: 12, lg: 8 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <Box sx={{ height: 460, position: 'relative' }}>
                 <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%', borderRadius: 12 }}>
@@ -77,7 +77,7 @@ export default function DisasterSatellite() {
                     <BaseLayer name="Google Satellite"><TileLayer url={GOOGLE_SATELLITE} attribution='&copy; Google' maxZoom={20} /></BaseLayer>
                     <BaseLayer name="Google Hybrid"><TileLayer url={GOOGLE_HYBRID} attribution='&copy; Google' maxZoom={20} /></BaseLayer>
                     <BaseLayer name="NASA MODIS (Daily)"><TileLayer url={NASA_GIBS_MODIS.replace('{time}', nasaDate)} attribution='&copy; NASA GIBS' maxZoom={9} /></BaseLayer>
-                    <BaseLayer name="Dark (CartoDB)"><TileLayer url={CARTO_DARK} attribution='&copy; CARTO' /></BaseLayer>
+                    <BaseLayer name="Dark (CartoDB)"><TileLayer url={CARTO_DARK} attribution='&copy; OpenStreetMap contributors' /></BaseLayer>
                     <BaseLayer name="Topo (ESRI)"><TileLayer url={ESRI_TOPO} attribution='&copy; Esri' /></BaseLayer>
                     <BaseLayer name="OpenTopoMap"><TileLayer url={OPEN_TOPO} attribution='&copy; OpenTopoMap' maxZoom={17} /></BaseLayer>
                     <Overlay checked name="Place Labels"><TileLayer url={ESRI_LABELS} attribution='&copy; Esri' opacity={0.8} /></Overlay>
@@ -96,7 +96,7 @@ export default function DisasterSatellite() {
               </Box>
             </Card>
           </Grid>
-          <Grid item xs={12} lg={4}>
+          <Grid size={{ xs: 12, lg: 4 }}>
             <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Data Sources</Typography>
@@ -130,7 +130,7 @@ export default function DisasterSatellite() {
       {/* Tab 1: Flood */}
       {activeTab === 1 && (
         <Grid container spacing={2.5}>
-          <Grid item xs={12} md={5} lg={4}>
+          <Grid size={{ xs: 12, md: 5, lg: 4 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Flood Risk Assessment</Typography>
@@ -154,9 +154,9 @@ export default function DisasterSatellite() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} md={7} lg={8}>
+          <Grid size={{ xs: 12, md: 7, lg: 8 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <Card sx={{ height: 300, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
                   <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url={ESRI_SATELLITE} attribution='&copy; Esri' maxZoom={19} />
@@ -166,7 +166,7 @@ export default function DisasterSatellite() {
                 </Card>
               </Grid>
               {floodData?.recommendations?.length > 0 && (
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
                     <CardContent>
                       <Typography variant="subtitle2" sx={{ color: '#F0F4FF', fontWeight: 700, mb: 1.5 }}>Recommendations</Typography>
@@ -190,7 +190,7 @@ export default function DisasterSatellite() {
       {/* Tab 2: Terrain */}
       {activeTab === 2 && (
         <Grid container spacing={2.5}>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid size={{ xs: 12, md: 6, lg: 4 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Elevation Profile</Typography>
@@ -210,7 +210,7 @@ export default function DisasterSatellite() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid size={{ xs: 12, md: 6, lg: 4 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Land Cover</Typography>
@@ -230,7 +230,7 @@ export default function DisasterSatellite() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} lg={4}>
+          <Grid size={{ xs: 12, lg: 4 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <Box sx={{ height: 300, position: 'relative', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}>
                 <MapContainer center={mapCenter} zoom={12} style={{ height: '100%', width: '100%' }}><TileLayer url={ESRI_TOPO} attribution='&copy; Esri' />{rectBounds && <Rectangle bounds={rectBounds} pathOptions={{ color: '#c4b5fd', fillColor: '#c4b5fd', fillOpacity: 0.08, weight: 2 }} />}</MapContainer>

@@ -1,242 +1,415 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react';
-import {
-  Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, Button, Chip,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, FormControl, InputLabel, Select, MenuItem, Tabs, Tab,
-} from '@mui/material';
-import { Phone as PhoneIcon, Sos as SosIcon } from '@mui/icons-material';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import { useDisasterData } from '../../context/DisasterDataContext';
+import { useEffect, useMemo, useState } from 'react';
+import { Marker, Popup } from 'react-leaflet';
 import axios from 'axios';
-import 'leaflet/dist/leaflet.css';
+import {
+  Clock, Loader2, MapPin, Navigation, Phone, Route, Siren, Users, X, type LucideIcon, HeartPulse, Flame, Shield, ShieldAlert,
+} from 'lucide-react';
+import { useDisasterData } from '../../context/DisasterDataContext';
+import { EmptyState, ErrorBanner, Mono, PageHeader, Panel, PanelHeader, Pill, Rows, Segmented } from '../../components/disaster/ui';
+import { BTN, BTN_DANGER, CARD, FIELD, tint } from '../../components/disaster/tokens';
+import { MapChip, MapFrame } from '../../components/disaster/map';
+import { dotIcon } from '../../components/disaster/mapUtils';
+import { DISASTER_API_URL } from '../../lib/disasterApi';
+import { cn } from '@/lib/utils';
 
-// Fix leaflet default icon for Vite
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
-
-const makeIcon = (color: string, emoji: string) => L.divIcon({
-  html: `<div style="width:26px;height:26px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:12px;">${emoji}</div>`,
-  className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -16],
-});
-
-const FACILITY_MAP: Record<string, { icon: L.DivIcon; accent: string; emoji: string; label: string }> = {
-  hospital: { icon: makeIcon('#FF4757', '🏥'), accent: '#FF4757', emoji: '🏥', label: 'Hospital' },
-  medical_camp: { icon: makeIcon('#FFA502', '⛺'), accent: '#FFA502', emoji: '⛺', label: 'Medical Camp' },
-  police_station: { icon: makeIcon('#818CF8', '👮'), accent: '#818CF8', emoji: '👮', label: 'Police Station' },
-  drinking_water: { icon: makeIcon('#2ED573', '💧'), accent: '#2ED573', emoji: '💧', label: 'Drinking Water' },
-  toilet: { icon: makeIcon('#64748B', '🚻'), accent: '#64748B', emoji: '🚻', label: 'Toilet' },
-  lost_found: { icon: makeIcon('#FFB74D', '🔍'), accent: '#FFB74D', emoji: '🔍', label: 'Lost & Found' },
-  information: { icon: makeIcon('#38BDF8', 'ℹ'), accent: '#38BDF8', emoji: 'ℹ️', label: 'Info Kiosk' },
+const FACILITY: Record<string, { color: string; emoji: string; label: string }> = {
+  hospital: { color: '#ef4444', emoji: '🏥', label: 'Hospital' },
+  medical_camp: { color: '#f59e0b', emoji: '⛺', label: 'Medical camp' },
+  police_station: { color: '#60a5fa', emoji: '👮', label: 'Police station' },
+  drinking_water: { color: '#10b981', emoji: '💧', label: 'Drinking water' },
+  toilet: { color: '#94a3b8', emoji: '🚻', label: 'Toilet' },
+  lost_found: { color: '#fbbf24', emoji: '🔍', label: 'Lost & found' },
+  information: { color: '#22d3ee', emoji: 'ℹ️', label: 'Info kiosk' },
 };
+const facilityMeta = (t: string) => FACILITY[t] || { color: '#94a3b8', emoji: '📍', label: t.replace(/_/g, ' ') };
+const ICONS: Record<string, L.DivIcon> = Object.fromEntries(Object.entries(FACILITY).map(([k, v]) => [k, dotIcon(v.color, v.emoji)]));
+const fallbackIcon = dotIcon('#94a3b8', '📍');
+
+const QUICK_DIAL = [
+  { label: 'Police', number: '100', color: '#60a5fa' },
+  { label: 'Ambulance', number: '102', color: '#ef4444' },
+  { label: 'Fire', number: '101', color: '#f59e0b' },
+  { label: 'NDRF', number: '1070', color: '#a78bfa' },
+  { label: 'Women helpline', number: '1091', color: '#ec4899' },
+];
+
+const CATEGORY_META: Record<string, { icon: LucideIcon; color: string; label: string }> = {
+  disaster: { icon: ShieldAlert, color: '#a78bfa', label: 'Disaster' },
+  fire: { icon: Flame, color: '#f59e0b', label: 'Fire' },
+  law_enforcement: { icon: Shield, color: '#60a5fa', label: 'Law enforcement' },
+  medical: { icon: HeartPulse, color: '#ef4444', label: 'Medical' },
+  women_safety: { icon: Phone, color: '#ec4899', label: 'Women safety' },
+  kumbh: { icon: MapPin, color: '#10b981', label: 'Event control' },
+};
+const catMeta = (c: string) => CATEGORY_META[c] || { icon: Phone, color: '#94a3b8', label: c.replace(/_/g, ' ') };
 
 const EMERGENCY_TYPES = [
-  { value: 'medical', label: 'Medical Emergency' }, { value: 'fire', label: 'Fire' },
-  { value: 'security', label: 'Security Threat' }, { value: 'stampede', label: 'Stampede Risk' },
-  { value: 'flood', label: 'Flood/Water' }, { value: 'lost_person', label: 'Lost Person' }, { value: 'other', label: 'Other' },
+  { value: 'medical', label: 'Medical emergency' },
+  { value: 'fire', label: 'Fire' },
+  { value: 'security', label: 'Security threat' },
+  { value: 'stampede', label: 'Stampede risk' },
+  { value: 'flood', label: 'Flood / water' },
+  { value: 'lost_person', label: 'Lost person' },
+  { value: 'other', label: 'Other' },
 ];
+
+type Tab = 'facilities' | 'contacts' | 'routes';
 
 export default function DisasterPilgrim() {
   const { availableCities, selectedCity } = useDisasterData();
-  const cityConfig = availableCities.find(c => c.id === selectedCity) || availableCities[0];
-  const API_BASE_URL = import.meta.env.VITE_DISASTER_API_URL || 'http://localhost:5001';
+  const city = availableCities.find((c) => c.id === selectedCity) || availableCities[0];
 
-  const [activeTab, setActiveTab] = useState(0);
+  const [tab, setTab] = useState<Tab>('facilities');
   const [facilities, setFacilities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState('');
-  const [selectedFacility, setSelectedFacility] = useState<any>(null);
-  const [safeRoutes, setSafeRoutes] = useState<any>(null);
+  const [type, setType] = useState('');
+  const [selected, setSelected] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [safeRoutes, setSafeRoutes] = useState<any>(null);
 
   const [sosOpen, setSosOpen] = useState(false);
-  const [sosForm, setSosForm] = useState({ name: '', phone: '', emergency_type: 'medical', description: '', lat: cityConfig.lat, lon: cityConfig.lon });
-  const [sosSubmitting, setSosSubmitting] = useState(false);
+  const [sos, setSos] = useState({ name: '', phone: '', emergency_type: 'medical', description: '' });
+  const [sosBusy, setSosBusy] = useState(false);
   const [sosResult, setSosResult] = useState<any>(null);
 
   useEffect(() => {
-    const loadFacilities = async () => {
-      setLoading(true);
-      try {
-        const params = selectedType ? `?type=${encodeURIComponent(selectedType)}` : '';
-        const res = await axios.get(`${API_BASE_URL}/api/pilgrim/facilities${params}`);
-        setFacilities(res.data.facilities || []);
-      } catch { setFacilities([]); } finally { setLoading(false); }
+    let cancelled = false;
+    setLoading(true);
+    axios
+      .get(`${DISASTER_API_URL}/api/pilgrim/facilities${type ? `?type=${encodeURIComponent(type)}` : ''}`)
+      .then((r) => !cancelled && setFacilities(r.data.facilities || []))
+      .catch(() => !cancelled && setFacilities([]))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
     };
-    loadFacilities();
-  }, [selectedType, API_BASE_URL]);
+  }, [type]);
 
   useEffect(() => {
-    if (activeTab === 1) { axios.get(`${API_BASE_URL}/api/emergency/contacts`).then(r => setContacts(r.data)).catch(() => {}); }
-    if (activeTab === 2) { axios.get(`${API_BASE_URL}/api/pilgrim/safe-routes?lat=${cityConfig.lat}&lon=${cityConfig.lon}`).then(r => setSafeRoutes(r.data)).catch(() => {}); }
-  }, [activeTab, cityConfig.lat, cityConfig.lon, API_BASE_URL]);
+    if (tab === 'contacts' && contacts.length === 0) {
+      axios.get(`${DISASTER_API_URL}/api/emergency/contacts`).then((r) => setContacts(Array.isArray(r.data) ? r.data : r.data?.contacts || [])).catch(() => {});
+    }
+    if (tab === 'routes' && !safeRoutes) {
+      axios.get(`${DISASTER_API_URL}/api/pilgrim/safe-routes?lat=${city.lat}&lon=${city.lon}`).then((r) => setSafeRoutes(r.data)).catch(() => setSafeRoutes({ error: true }));
+    }
+  }, [tab, city.lat, city.lon, contacts.length, safeRoutes]);
 
-  const handleSosSubmit = async () => {
-    setSosSubmitting(true);
-    try { const res = await axios.post(`${API_BASE_URL}/api/pilgrim/sos`, { ...sosForm, city: selectedCity }); setSosResult(res.data); }
-    catch { setSosResult({ success: false, message: 'Failed to submit. Call 100 or 102 directly.' }); }
-    finally { setSosSubmitting(false); }
+  const submitSos = async () => {
+    setSosBusy(true);
+    try {
+      const r = await axios.post(`${DISASTER_API_URL}/api/pilgrim/sos`, { ...sos, lat: city.lat, lon: city.lon, city: selectedCity });
+      setSosResult(r.data);
+    } catch {
+      setSosResult({ success: false, message: 'Could not submit. Call 100 or 102 directly.' });
+    } finally {
+      setSosBusy(false);
+    }
   };
-  const closeSos = () => { setSosOpen(false); setSosResult(null); };
+  const closeSos = () => {
+    setSosOpen(false);
+    setSosResult(null);
+  };
 
-  const groupedContacts = contacts.reduce((acc: Record<string, any[]>, c: any) => { const k = c.category || 'general'; if (!acc[k]) acc[k] = []; acc[k].push(c); return acc; }, {});
+  const grouped = useMemo(
+    () =>
+      contacts.reduce<Record<string, any[]>>((acc, c) => {
+        (acc[c.category || 'general'] ||= []).push(c);
+        return acc;
+      }, {}),
+    [contacts],
+  );
+  const typeCounts = useMemo(
+    () => facilities.reduce<Record<string, number>>((acc, f) => ({ ...acc, [f.facility_type]: (acc[f.facility_type] || 0) + 1 }), {}),
+    [facilities],
+  );
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        <Box><Typography variant="h5" sx={{ fontWeight: 800, color: '#F0F4FF' }}>Pilgrim Assistance</Typography><Typography variant="body2" sx={{ color: '#475569' }}>Facilities, emergency contacts and safe routes for pilgrims</Typography></Box>
-        <Button variant="contained" color="error" size="large" startIcon={<SosIcon />} onClick={() => setSosOpen(true)} sx={{ px: 4, py: 1.5, fontSize: '1rem', fontWeight: 800, background: 'linear-gradient(135deg, #FF4757 0%, #C62828 100%)', boxShadow: '0 0 20px rgba(255,71,87,0.4)', animation: 'sosGlow 2s ease-in-out infinite', '@keyframes sosGlow': { '0%,100%': { boxShadow: '0 0 20px rgba(255,71,87,0.4)' }, '50%': { boxShadow: '0 0 30px rgba(255,71,87,0.8)' } } }}>SOS Emergency</Button>
-      </Box>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Pilgrim aids"
+        title="Pilgrim assistance"
+        description="Nearby facilities, emergency contacts and safe routes for pilgrims on the ground."
+        action={
+          <button type="button" onClick={() => setSosOpen(true)} className={cn(BTN_DANGER, 'px-5 py-2.5 text-[13px] uppercase tracking-[0.08em]')}>
+            <Siren size={16} /> SOS emergency
+          </button>
+        }
+      />
 
-      <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        {[{ label: 'Police', number: '100', color: '#818CF8' }, { label: 'Ambulance', number: '102', color: '#FF4757' }, { label: 'Fire', number: '101', color: '#FFA502' }, { label: 'NDRF', number: '1070', color: '#c4b5fd' }, { label: 'Women Helpline', number: '1091', color: '#EC4899' }].map(({ label, number, color }) => (
-          <Button key={number} variant="outlined" size="small" href={`tel:${number}`} startIcon={<PhoneIcon sx={{ fontSize: 14 }} />} sx={{ py: 0.5, borderColor: `${color}40`, color, '&:hover': { borderColor: color, background: `${color}10` }, fontSize: '0.78rem', fontWeight: 700 }}>{label}: {number}</Button>
+      {/* quick dial */}
+      <div className="flex flex-wrap gap-2">
+        {QUICK_DIAL.map((q) => (
+          <a
+            key={q.number}
+            href={`tel:${q.number}`}
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[12.5px] font-semibold transition-colors hover:bg-foreground/[0.05]"
+            style={{ color: q.color, borderColor: tint(q.color, 0.35), background: tint(q.color, 0.08) }}
+          >
+            <Phone size={13} /> {q.label} <span className="font-mono text-[11px] opacity-80">{q.number}</span>
+          </a>
         ))}
-      </Box>
+      </div>
 
-      <Box sx={{ borderBottom: '1px solid rgba(196,181,253,0.15)', mb: 2 }}>
-        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ '& .MuiTab-root': { color: '#64748B', fontWeight: 600, fontSize: '0.82rem', minWidth: 'auto', px: 2 }, '& .Mui-selected': { color: '#c4b5fd' }, '& .MuiTabs-indicator': { background: '#c4b5fd' } }}>
-          <Tab label="Nearby Facilities" /><Tab label="Emergency Contacts" /><Tab label="Safe Routes" />
-        </Tabs>
-      </Box>
+      <Segmented<Tab>
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'facilities', label: 'Nearby facilities' },
+          { value: 'contacts', label: 'Emergency contacts' },
+          { value: 'routes', label: 'Safe routes' },
+        ]}
+      />
 
-      {/* Tab 0: Facilities + Map */}
-      {activeTab === 0 && (
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={7}>
-            <Card sx={{ height: 420, overflow: 'hidden', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-              <MapContainer center={[cityConfig.lat, cityConfig.lon]} zoom={cityConfig.zoom || 14} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
-                {facilities.filter((f: any) => f.lat && f.lon).map((facility: any) => {
-                  const fmap = FACILITY_MAP[facility.facility_type];
-                  return (
-                    <Marker key={facility.id} position={[facility.lat, facility.lon]} icon={fmap?.icon || new L.Icon.Default()} eventHandlers={{ click: () => setSelectedFacility(facility) }}>
-                      <Popup><strong>{facility.name}</strong><br />{fmap?.emoji} {facility.facility_type.replace('_', ' ')}<br />{facility.address && <>{facility.address}<br /></>}{facility.phone && <a href={`tel:${facility.phone}`}>{facility.phone}</a>}<br />{facility.operating_hours}</Popup>
-                    </Marker>
-                  );
-                })}
-              </MapContainer>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={5}>
-            <Box sx={{ mb: 1.5 }}>
-              <FormControl size="small" fullWidth>
-                <Select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} displayEmpty sx={{ fontSize: '0.82rem' }}>
-                  <MenuItem value="">All Facilities ({facilities.length})</MenuItem>
-                  {Object.entries(FACILITY_MAP).map(([key, val]) => <MenuItem key={key} value={key}>{val.emoji} {val.label}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ maxHeight: 370, overflow: 'auto' }}>
+      {/* Facilities */}
+      {tab === 'facilities' && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <MapFrame
+            center={[city.lat, city.lon]}
+            zoom={city.zoom || 14}
+            height={560}
+            overlay={
+              <div className="pointer-events-none absolute left-3 top-3 z-[1000]">
+                <MapChip>
+                  <Mono className="text-white/80">{facilities.length} facilities · {city.name}</Mono>
+                </MapChip>
+              </div>
+            }
+          >
+            {facilities.filter((f) => f.lat && f.lon).map((f) => {
+              const m = facilityMeta(f.facility_type);
+              return (
+                <Marker key={f.id} position={[f.lat, f.lon]} icon={ICONS[f.facility_type] || fallbackIcon} eventHandlers={{ click: () => setSelected(f) }}>
+                  <Popup>
+                    <strong>{f.name}</strong>
+                    <br />{m.emoji} {m.label}
+                    {f.address && <><br />{f.address}</>}
+                    {f.phone && <><br /><a href={`tel:${f.phone}`} style={{ color: m.color }}>{f.phone}</a></>}
+                    {f.operating_hours && <><br />{f.operating_hours}</>}
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapFrame>
+
+          <Panel className="flex max-h-[560px] flex-col p-4">
+            <select value={type} onChange={(e) => setType(e.target.value)} className={cn(FIELD, 'mb-3 cursor-pointer')}>
+              <option value="">All facilities ({facilities.length})</option>
+              {Object.entries(FACILITY).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.emoji} {v.label}{typeCounts[k] ? ` (${typeCounts[k]})` : ''}
+                </option>
+              ))}
+            </select>
+            <div className="-mx-1 flex-1 space-y-2 overflow-y-auto px-1 pb-1">
               {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress sx={{ color: '#c4b5fd' }} size={28} /></Box>
+                <div className="flex justify-center py-10"><Loader2 className="size-5 animate-spin text-brand-400" /></div>
               ) : facilities.length === 0 ? (
-                <Alert severity="info" sx={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.2)', color: '#38BDF8' }}>No facilities found.</Alert>
+                <EmptyState icon={MapPin} title="No facilities found" hint="Try a different facility type." color="#22d3ee" />
               ) : (
-                facilities.map((f: any) => {
-                  const fmap = FACILITY_MAP[f.facility_type];
-                  const isSelected = selectedFacility?.id === f.id;
+                facilities.map((f) => {
+                  const m = facilityMeta(f.facility_type);
+                  const on = selected?.id === f.id;
                   return (
-                    <Box key={f.id} onClick={() => setSelectedFacility(f)} sx={{ p: 1.5, mb: 1, borderRadius: 2, cursor: 'pointer', background: isSelected ? `${fmap?.accent || '#c4b5fd'}15` : 'rgba(17,24,39,0.5)', border: `1px solid ${isSelected ? (fmap?.accent || '#c4b5fd') + '40' : 'rgba(255,255,255,0.06)'}`, transition: 'all 0.15s', '&:hover': { background: `${fmap?.accent || '#c4b5fd'}0A`, borderColor: `${fmap?.accent || '#c4b5fd'}25` } }}>
-                      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                        <Typography sx={{ fontSize: 18, mt: -0.25 }}>{fmap?.emoji}</Typography>
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700, color: '#F0F4FF', fontSize: '0.8rem' }}>{f.name}</Typography>
-                          <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontSize: '0.7rem' }}>{f.address}</Typography>
-                          {f.phone && <Typography component="a" href={`tel:${f.phone}`} variant="caption" sx={{ color: fmap?.accent || '#c4b5fd', fontSize: '0.7rem', fontWeight: 600 }}>{f.phone}</Typography>}
-                        </Box>
-                        <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.65rem', mt: 0.25 }}>{f.operating_hours}</Typography>
-                      </Box>
-                    </Box>
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setSelected(f)}
+                      className="w-full rounded-xl border p-3 text-left transition-all hover:-translate-y-px"
+                      style={{
+                        borderColor: on ? tint(m.color, 0.6) : 'hsl(var(--border) / 0.7)',
+                        background: on ? tint(m.color, 0.1) : 'hsl(var(--background) / 0.35)',
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[16px]" style={{ background: tint(m.color, 0.14) }}>
+                          {m.emoji}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="truncate text-[13px] font-semibold">{f.name}</div>
+                            {f.operating_hours && (
+                              <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground"><Clock size={10} />{f.operating_hours}</span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{m.label}{f.address ? ` · ${f.address}` : ''}</div>
+                          {f.phone && (
+                            <a href={`tel:${f.phone}`} onClick={(e) => e.stopPropagation()} className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] font-semibold" style={{ color: m.color }}>
+                              <Phone size={10} /> {f.phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </button>
                   );
                 })
               )}
-            </Box>
-          </Grid>
-        </Grid>
+            </div>
+          </Panel>
+        </div>
       )}
 
-      {/* Tab 1: Emergency Contacts */}
-      {activeTab === 1 && (
-        <Grid container spacing={2}>
-          {Object.entries(groupedContacts).map(([category, items]) => (
-            <Grid item xs={12} sm={6} key={category}>
-              <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-                <CardContent>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#c4b5fd', textTransform: 'capitalize', mb: 1, fontSize: '0.75rem' }}>{category.replace(/_/g, ' ')}</Typography>
-                  {(items as any[]).map((c: any) => (
-                    <Box key={c.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <Box><Typography variant="body2" sx={{ fontWeight: 600, color: '#F0F4FF', fontSize: '0.78rem' }}>{c.service_name}</Typography><Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.68rem' }}>{c.description}</Typography></Box>
-                      <Button href={`tel:${c.phone_number}`} size="small" sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#FF4757', borderColor: 'rgba(255,71,87,0.4)', '&:hover': { background: 'rgba(255,71,87,0.08)' } }} variant="outlined">{c.phone_number}</Button>
-                    </Box>
-                  ))}
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+      {/* Contacts */}
+      {tab === 'contacts' && (
+        Object.keys(grouped).length === 0 ? (
+          <Spinnerish />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {Object.entries(grouped).map(([cat, items]) => {
+              const m = catMeta(cat);
+              return (
+                <Panel key={cat}>
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <span className="flex size-8 items-center justify-center rounded-lg border" style={{ color: m.color, borderColor: tint(m.color, 0.3), background: tint(m.color, 0.12) }}>
+                      <m.icon size={14} />
+                    </span>
+                    <div>
+                      <div className="text-[13.5px] font-semibold capitalize">{m.label}</div>
+                      <Mono>{items.length} line{items.length > 1 ? 's' : ''}</Mono>
+                    </div>
+                  </div>
+                  <Rows>
+                    {items.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-medium">{c.service_name}</div>
+                          <div className="truncate text-[11.5px] text-muted-foreground">{c.description}</div>
+                        </div>
+                        <a href={`tel:${c.phone_number}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors hover:bg-foreground/[0.06]" style={{ color: m.color, borderColor: tint(m.color, 0.35) }}>
+                          <Phone size={11} /> {c.phone_number}
+                        </a>
+                      </div>
+                    ))}
+                  </Rows>
+                </Panel>
+              );
+            })}
+          </div>
+        )
       )}
 
-      {/* Tab 2: Safe Routes */}
-      {activeTab === 2 && (
-        safeRoutes ? (
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1 }}>Evacuation Routes</Typography>
-                  {(safeRoutes.evacuation_routes || []).map((r: any, i: number) => (
-                    <Box key={i} sx={{ py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#F0F4FF', fontSize: '0.8rem' }}>{r.name}</Typography>
-                      <Typography variant="caption" sx={{ color: '#64748B' }}>Capacity {r.capacity?.toLocaleString()} • <span style={{ color: r.status === 'open' ? '#2ED573' : '#FF4757' }}>{r.status?.toUpperCase()}</span>{r.distance_from_user_km != null && ` • ${r.distance_from_user_km} km away`}</Typography>
-                    </Box>
+      {/* Safe routes */}
+      {tab === 'routes' && (
+        !safeRoutes ? (
+          <Spinnerish />
+        ) : safeRoutes.error ? (
+          <ErrorBanner>Could not load safe routes.</ErrorBanner>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel>
+              <PanelHeader title="Evacuation routes" meta="Sorted by distance from the event centre" action={<Route size={16} className="text-brand-400" />} />
+              {!(safeRoutes.evacuation_routes || []).length ? (
+                <EmptyState icon={Route} title="No routes available" />
+              ) : (
+                <Rows>
+                  {safeRoutes.evacuation_routes.map((r: any, i: number) => {
+                    const open = r.status === 'open';
+                    return (
+                      <div key={i} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-semibold">{r.name}</div>
+                          <div className="mt-0.5 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+                            capacity {r.capacity?.toLocaleString()}{r.distance_from_user_km != null && ` · ${r.distance_from_user_km} km away`}
+                          </div>
+                        </div>
+                        <Pill color={open ? '#10b981' : '#ef4444'}>{r.status}</Pill>
+                      </div>
+                    );
+                  })}
+                </Rows>
+              )}
+            </Panel>
+            <Panel>
+              <PanelHeader title="Assembly points" meta="Nearest safe gathering areas" action={<Navigation size={16} className="text-emerald-400" />} />
+              {!(safeRoutes.assembly_points || []).length ? (
+                <EmptyState icon={Users} title="No assembly points" />
+              ) : (
+                <div className="space-y-2.5">
+                  {safeRoutes.assembly_points.map((p: any, i: number) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.07] p-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Users size={14} /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold">{p.name}</div>
+                        <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">capacity {p.capacity?.toLocaleString()}</div>
+                      </div>
+                      {p.distance_from_user_km != null && (
+                        <div className="shrink-0 text-right">
+                          <div className="text-[15px] font-semibold text-emerald-400">{p.distance_from_user_km}<span className="text-[11px] text-muted-foreground"> km</span></div>
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 1 }}>Assembly Points</Typography>
-                  {(safeRoutes.assembly_points || []).map((p: any, i: number) => (
-                    <Box key={i} sx={{ py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#2ED573', fontSize: '0.8rem' }}>{p.name}</Typography>
-                      <Typography variant="caption" sx={{ color: '#64748B' }}>Capacity {p.capacity?.toLocaleString()}{p.distance_from_user_km != null && ` • ${p.distance_from_user_km} km away`}</Typography>
-                    </Box>
-                  ))}
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        ) : <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress sx={{ color: '#c4b5fd' }} /></Box>
+                </div>
+              )}
+            </Panel>
+          </div>
+        )
       )}
 
-      {/* SOS Dialog */}
-      <Dialog open={sosOpen} onClose={closeSos} maxWidth="sm" fullWidth PaperProps={{ sx: { background: '#111827', border: '1px solid rgba(255,71,87,0.3)' } }}>
-        <DialogTitle sx={{ background: 'linear-gradient(135deg, #C62828 0%, #FF4757 100%)', color: '#fff', fontWeight: 800, letterSpacing: 0.5 }}>SOS Emergency Report</DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          {sosResult ? (
-            <Alert severity={sosResult.success ? 'success' : 'error'} sx={{ mt: 1, background: sosResult.success ? 'rgba(46,213,115,0.1)' : 'rgba(255,71,87,0.1)' }}>
-              {sosResult.message}
-              {sosResult.nearest_assembly_point && <Typography variant="body2" sx={{ mt: 1 }}>Nearest assembly point: <strong>{sosResult.nearest_assembly_point.name}</strong>{sosResult.nearest_assembly_point.distance_km && ` (${sosResult.nearest_assembly_point.distance_km} km)`}</Typography>}
-            </Alert>
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-              <TextField label="Your Name" size="small" fullWidth value={sosForm.name} onChange={(e) => setSosForm({ ...sosForm, name: e.target.value })} />
-              <TextField label="Phone Number" size="small" fullWidth value={sosForm.phone} onChange={(e) => setSosForm({ ...sosForm, phone: e.target.value })} />
-              <FormControl size="small" fullWidth><InputLabel>Emergency Type</InputLabel><Select value={sosForm.emergency_type} label="Emergency Type" onChange={(e) => setSosForm({ ...sosForm, emergency_type: e.target.value })}>{EMERGENCY_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}</Select></FormControl>
-              <TextField label="Description of emergency" size="small" fullWidth multiline rows={3} value={sosForm.description} onChange={(e) => setSosForm({ ...sosForm, description: e.target.value })} />
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={closeSos} sx={{ color: '#64748B' }}>{sosResult ? 'Close' : 'Cancel'}</Button>
-          {!sosResult && <Button variant="contained" color="error" onClick={handleSosSubmit} disabled={sosSubmitting} sx={{ background: 'linear-gradient(135deg, #FF4757 0%, #C62828 100%)' }}>{sosSubmitting ? 'Submitting...' : 'Submit SOS'}</Button>}
-        </DialogActions>
-      </Dialog>
-    </Box>
+      {/* SOS modal */}
+      {sosOpen && (
+        <div className="fixed inset-0 z-[10005] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center" onClick={closeSos}>
+          <div className={cn(CARD, 'w-full max-w-md overflow-hidden !bg-card dark:!bg-[#0b1020]')} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="SOS emergency report">
+            <div className="flex items-center justify-between bg-gradient-to-r from-red-600 to-rose-500 px-5 py-4 text-white">
+              <div className="flex items-center gap-2.5">
+                <Siren size={18} />
+                <div>
+                  <div className="text-[15px] font-bold">SOS emergency report</div>
+                  <div className="text-[11px] text-white/80">Goes straight to the control room</div>
+                </div>
+              </div>
+              <button type="button" onClick={closeSos} className="rounded-lg p-1.5 hover:bg-white/15" aria-label="Close"><X size={16} /></button>
+            </div>
+
+            <div className="space-y-3 p-5">
+              {sosResult ? (
+                <div className={cn('rounded-xl border p-4 text-[13px]', sosResult.success ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-red-400/30 bg-red-500/10')}>
+                  <div className="font-semibold">{sosResult.message}</div>
+                  {sosResult.nearest_assembly_point && (
+                    <div className="mt-2 text-muted-foreground">
+                      Nearest assembly point: <strong className="text-foreground">{sosResult.nearest_assembly_point.name}</strong>
+                      {sosResult.nearest_assembly_point.distance_km && ` · ${sosResult.nearest_assembly_point.distance_km} km`}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block"><Mono className="mb-1.5 block">Your name</Mono><input className={FIELD} value={sos.name} onChange={(e) => setSos({ ...sos, name: e.target.value })} placeholder="Full name" /></label>
+                    <label className="block"><Mono className="mb-1.5 block">Phone</Mono><input className={FIELD} value={sos.phone} onChange={(e) => setSos({ ...sos, phone: e.target.value })} placeholder="+91" inputMode="tel" /></label>
+                  </div>
+                  <label className="block"><Mono className="mb-1.5 block">Emergency type</Mono>
+                    <select className={cn(FIELD, 'cursor-pointer')} value={sos.emergency_type} onChange={(e) => setSos({ ...sos, emergency_type: e.target.value })}>
+                      {EMERGENCY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block"><Mono className="mb-1.5 block">What is happening?</Mono>
+                    <textarea className={cn(FIELD, 'min-h-[88px] resize-y')} value={sos.description} onChange={(e) => setSos({ ...sos, description: e.target.value })} placeholder="Describe the emergency and how many people are affected" />
+                  </label>
+                  <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground"><MapPin size={12} /> Location defaults to the event centre ({city.display_name}).</div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border/60 px-5 py-3 dark:border-white/[0.06]">
+              <button type="button" onClick={closeSos} className={BTN}>{sosResult ? 'Close' : 'Cancel'}</button>
+              {!sosResult && (
+                <button type="button" onClick={submitSos} disabled={sosBusy} className={BTN_DANGER}>
+                  {sosBusy ? <Loader2 size={14} className="animate-spin" /> : <Siren size={14} />} Send SOS
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Spinnerish() {
+  return (
+    <div className={cn(CARD, 'flex items-center justify-center py-16')}>
+      <Loader2 className="size-5 animate-spin text-brand-400" />
+    </div>
   );
 }

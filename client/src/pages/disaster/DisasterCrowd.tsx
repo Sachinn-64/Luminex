@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from 'react';
 import { Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, Chip, Divider, LinearProgress, IconButton, Tooltip } from '@mui/material';
-import { Groups, MyLocation, TrendingUp, Warning, Refresh, PeopleAlt, InfoOutlined, CloudQueue } from '@mui/icons-material';
+import { MyLocation, TrendingUp, Warning, Refresh, PeopleAlt, InfoOutlined, CloudQueue } from '@mui/icons-material';
 import { MapContainer, TileLayer, Circle, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import { useDisasterData } from '../../context/DisasterDataContext';
 import 'leaflet/dist/leaflet.css';
@@ -97,7 +97,7 @@ export default function DisasterCrowd() {
           { label: 'Zones Monitored', value: zones.length, color: '#c4b5fd', icon: <MyLocation /> },
           { label: 'High-Risk Zones', value: criticalZones.length, color: criticalZones.length > 0 ? '#FF4757' : '#2ED573', icon: <Warning /> },
         ].map(({ label, value, color, icon }) => (
-          <Grid item xs={6} md={3} key={label}>
+          <Grid key={label} size={{ xs: 6, md: 3 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent sx={{ py: 2.5 }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><Box sx={{ color }}>{icon}</Box><Typography variant="caption" sx={{ color: '#94A3B8' }}>{label}</Typography></Box><Typography variant="h5" sx={{ fontWeight: 800, color }}>{value}</Typography></CardContent>
             </Card>
@@ -106,10 +106,10 @@ export default function DisasterCrowd() {
       </Grid>
 
       <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <Card sx={{ height: 460, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
             <MapContainer center={mapCenter} zoom={cityConfig?.zoom || 13} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
               {zones.map((zone: any) => {
                 if (!zone.coordinates || zone.coordinates.length < 2) return null;
                 const [lat, lon] = zone.coordinates;
@@ -131,7 +131,7 @@ export default function DisasterCrowd() {
             ))}
           </Box>
         </Grid>
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Card sx={{ height: 460, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
             <CardContent sx={{ pb: 1, flexShrink: 0 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F0F4FF' }}>Zone Details</Typography><Chip icon={<PeopleAlt sx={{ fontSize: 14 }} />} label={`${zones.length} zones`} size="small" sx={{ bgcolor: 'rgba(196,181,253,0.1)', color: '#c4b5fd' }} /></Box>
@@ -143,7 +143,7 @@ export default function DisasterCrowd() {
           </Card>
         </Grid>
         {zones.length > 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#F0F4FF', mb: 2 }}>Zone Busyness Overview</Typography>

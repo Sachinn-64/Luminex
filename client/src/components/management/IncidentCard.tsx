@@ -1,23 +1,22 @@
 import { useState } from 'react';
 import type { AxiosInstance } from 'axios';
-import { ChevronDown, ChevronUp, MapPin, Send, Truck } from 'lucide-react';
-import { LevelBadge } from '../disaster/ui';
+import { ChevronDown, ChevronUp, Clock, Loader2, MapPin, Send, Truck } from 'lucide-react';
+import { LevelBadge, Mono } from '../disaster/ui';
+import { BTN, FIELD, riskColor, tint } from '../disaster/tokens';
 import {
   INCIDENT_TYPES, apiError, timeAgo,
   type Incident, type IncidentStatus, type Resource, type Severity,
 } from '../../lib/disasterApi';
+import { cn } from '@/lib/utils';
 
 const STATUSES: IncidentStatus[] = ['reported', 'acknowledged', 'responding', 'contained', 'resolved'];
 const SEVERITIES: Severity[] = ['low', 'moderate', 'high', 'critical'];
-
-const select = {
-  fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid hsl(var(--border))',
-  background: 'hsl(var(--background))', color: 'hsl(var(--foreground))',
-};
-const button = {
-  fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid hsl(var(--border))',
-  background: 'transparent', color: 'hsl(var(--foreground))', cursor: 'pointer',
-  display: 'inline-flex', alignItems: 'center', gap: 6,
+const STATUS_COLOR: Record<IncidentStatus, string> = {
+  reported: '#f59e0b',
+  acknowledged: '#eab308',
+  responding: '#60a5fa',
+  contained: '#a78bfa',
+  resolved: '#10b981',
 };
 
 interface Props {
@@ -33,7 +32,9 @@ export default function IncidentCard({ incident, api, isAdmin, onChanged }: Prop
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const typeLabel = INCIDENT_TYPES.find(t => t.value === incident.incident_type)?.label || incident.incident_type;
+  const typeLabel = INCIDENT_TYPES.find((t) => t.value === incident.incident_type)?.label || incident.incident_type;
+  const sevColor = riskColor(incident.severity);
+  const resolved = incident.status === 'resolved';
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -59,97 +60,125 @@ export default function IncidentCard({ incident, api, isAdmin, onChanged }: Prop
     }
   };
 
-  const dispatch = (resourceId: number) => run(async () => {
-    await api.post(`/api/management/incidents/${incident.id}/dispatch`, { resource_id: resourceId });
-    await loadRecs();
-  });
+  const dispatch = (resourceId: number) =>
+    run(async () => {
+      await api.post(`/api/management/incidents/${incident.id}/dispatch`, { resource_id: resourceId });
+      await loadRecs();
+    });
 
   const toggle = () => {
     const next = !open;
     setOpen(next);
-    if (next && isAdmin && incident.status !== 'resolved') loadRecs();
+    if (next && isAdmin && !resolved) loadRecs();
   };
 
   return (
-    <div style={{
-      border: '1px solid hsl(var(--border) / 0.7)', borderRadius: 10, padding: 12,
-      opacity: incident.status === 'resolved' ? 0.6 : 1, background: 'hsl(var(--background) / 0.35)',
-    }}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 14, color: 'hsl(var(--foreground))' }}>#{incident.id} {incident.title}</strong>
+    <article
+      className={cn('relative overflow-hidden rounded-xl border bg-background/40 transition-colors', resolved && 'opacity-60')}
+      style={{ borderColor: tint(sevColor, open ? 0.45 : 0.25) }}
+    >
+      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: sevColor }} />
+      <button type="button" onClick={toggle} className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[11px] text-muted-foreground">#{incident.id}</span>
+            <span className="text-[13.5px] font-semibold">{incident.title}</span>
             <LevelBadge level={incident.severity} />
+            <span
+              className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]"
+              style={{ color: STATUS_COLOR[incident.status], background: tint(STATUS_COLOR[incident.status], 0.12) }}
+            >
+              {incident.status}
+            </span>
           </div>
-          <div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 4 }}>
-            {typeLabel} · {incident.status} · {incident.source} · {timeAgo(incident.created_at)}
-            {' · '}<MapPin size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> {incident.lat.toFixed(4)}, {incident.lon.toFixed(4)}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+            <span>{typeLabel}</span>
+            <span>· {incident.source}</span>
+            <span className="inline-flex items-center gap-1"><Clock size={11} /> {timeAgo(incident.created_at)}</span>
+            <span className="inline-flex items-center gap-1"><MapPin size={11} /> {incident.lat.toFixed(4)}, {incident.lon.toFixed(4)}</span>
           </div>
           {incident.resources.length > 0 && (
-            <div style={{ fontSize: 12, color: 'hsl(var(--foreground))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Truck size={12} /> {incident.resources.map(r => r.name).join(', ')}
+            <div className="mt-1.5 inline-flex items-center gap-1.5 text-[12px] text-cyan-400">
+              <Truck size={12} /> {incident.resources.map((r) => r.name).join(', ')}
             </div>
           )}
         </div>
-        <button style={{ ...button, padding: 4 }} onClick={toggle} aria-label="Toggle details">
-          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      </div>
+        <span className="mt-0.5 shrink-0 text-muted-foreground">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+      </button>
 
       {open && (
-        <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-          {incident.description && <div style={{ fontSize: 13, color: 'hsl(var(--foreground))' }}>{incident.description}</div>}
+        <div className="space-y-4 border-t border-border/60 px-4 py-4 dark:border-white/[0.06]">
+          {incident.description && <p className="text-[13px] leading-relaxed text-foreground/90">{incident.description}</p>}
 
-          {isAdmin && incident.status !== 'resolved' && (
+          {isAdmin && !resolved && (
             <>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <label style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Status{' '}
-                  <select style={select} value={incident.status} disabled={busy} onChange={e => update({ status: e.target.value })}>
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <Mono className="mb-1.5 block">Status</Mono>
+                  <select className={cn(FIELD, 'cursor-pointer')} value={incident.status} disabled={busy} onChange={(e) => update({ status: e.target.value })}>
+                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </label>
-                <label style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Severity{' '}
-                  <select style={select} value={incident.severity} disabled={busy} onChange={e => update({ severity: e.target.value })}>
-                    {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                <label className="block">
+                  <Mono className="mb-1.5 block">Severity</Mono>
+                  <select className={cn(FIELD, 'cursor-pointer')} value={incident.severity} disabled={busy} onChange={(e) => update({ severity: e.target.value })}>
+                    {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </label>
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', marginBottom: 6 }}>Recommended resources (nearest matching, available)</div>
-                {recs === null && <div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Loading…</div>}
-                {recs?.length === 0 && <div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>No matching resource is available.</div>}
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {recs?.map(r => (
-                    <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--foreground))' }}>
-                      <span>{r.name} <span style={{ color: 'hsl(var(--muted-foreground))' }}>· {r.distance_km} km · ETA ~{r.eta_minutes} min</span></span>
-                      <button style={button} disabled={busy} onClick={() => dispatch(r.id)}><Truck size={12} /> Dispatch</button>
+                <Mono className="mb-2 block">Recommended resources · nearest available</Mono>
+                {recs === null && <div className="flex items-center gap-2 text-[12px] text-muted-foreground"><Loader2 size={12} className="animate-spin" /> Finding resources…</div>}
+                {recs?.length === 0 && <div className="text-[12px] text-muted-foreground">No matching resource is available right now.</div>}
+                <div className="space-y-1.5">
+                  {recs?.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-[12.5px] dark:border-white/[0.06]">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{r.name}</div>
+                        <div className="font-mono text-[10.5px] text-muted-foreground">{r.distance_km} km · ETA ~{r.eta_minutes} min</div>
+                      </div>
+                      <button type="button" className={cn(BTN, 'shrink-0 border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/10')} disabled={busy} onClick={() => dispatch(r.id)}>
+                        <Truck size={12} /> Dispatch
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <form style={{ display: 'flex', gap: 6 }} onSubmit={e => { e.preventDefault(); if (note.trim()) update({ note: note.trim() }).then(() => setNote('')); }}>
-                <input value={note} onChange={e => setNote(e.target.value)} maxLength={500} placeholder="Add a field note…"
-                  style={{ ...select, flex: 1, padding: '6px 8px' }} />
-                <button type="submit" style={button} disabled={busy || !note.trim()}><Send size={12} /></button>
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (note.trim()) update({ note: note.trim() }).then(() => setNote(''));
+                }}
+              >
+                <input className={FIELD} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Add a field note…" />
+                <button type="submit" className={cn(BTN, 'shrink-0 px-3')} disabled={busy || !note.trim()} aria-label="Add note">
+                  {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                </button>
               </form>
             </>
           )}
 
-          {error && <div style={{ fontSize: 12, color: '#ef4444' }}>{error}</div>}
+          {error && <div className="text-[12px] text-red-400">{error}</div>}
 
           {incident.log.length > 0 && (
-            <div style={{ borderTop: '1px solid hsl(var(--border) / 0.6)', paddingTop: 8 }}>
-              {incident.log.map((l, i) => (
-                <div key={i} style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
-                  {timeAgo(l.created_at)} · <span style={{ color: 'hsl(var(--foreground))' }}>{l.message}</span> · {l.actor}
-                </div>
-              ))}
+            <div>
+              <Mono className="mb-2 block">Timeline</Mono>
+              <ol className="relative space-y-2 border-l border-border/70 pl-4 dark:border-white/[0.08]">
+                {incident.log.map((l, i) => (
+                  <li key={i} className="relative text-[12px]">
+                    <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-brand-400" />
+                    <span className="text-foreground">{l.message}</span>
+                    <span className="ml-2 font-mono text-[10.5px] text-muted-foreground">{timeAgo(l.created_at)} · {l.actor}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }

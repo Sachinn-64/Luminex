@@ -1,48 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react';
-import {
-  Grid, Card, CardContent, Typography, Box, CircularProgress, Chip, Button,
-} from '@mui/material';
-import { CheckCircle as CheckIcon } from '@mui/icons-material';
+import { useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
+import { AlertOctagon, AlertTriangle, BellRing, Check, Info, Loader2, RefreshCw, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useDisasterData } from '../../context/DisasterDataContext';
 import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
+import { EmptyState, Mono, PageHeader, Panel, PanelHeader, Pill, StatCard } from '../../components/disaster/ui';
+import { BTN, riskColor, tint } from '../../components/disaster/tokens';
+import { DISASTER_API_URL } from '../../lib/disasterApi';
+import { cn } from '@/lib/utils';
 
-const PRIORITY_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  critical: { color: '#FF4757', bg: 'rgba(255,71,87,0.1)', border: 'rgba(255,71,87,0.25)' },
-  high: { color: '#FFA502', bg: 'rgba(255,165,2,0.1)', border: 'rgba(255,165,2,0.25)' },
-  moderate: { color: '#FFD700', bg: 'rgba(255,215,0,0.08)', border: 'rgba(255,215,0,0.2)' },
-  low: { color: '#2ED573', bg: 'rgba(46,213,115,0.08)', border: 'rgba(46,213,115,0.2)' },
-};
+type Priority = 'critical' | 'high' | 'moderate' | 'low';
+const PRIORITIES: { key: Priority; label: string; icon: LucideIcon }[] = [
+  { key: 'critical', label: 'Critical', icon: AlertOctagon },
+  { key: 'high', label: 'High', icon: AlertTriangle },
+  { key: 'moderate', label: 'Moderate', icon: BellRing },
+  { key: 'low', label: 'Low', icon: Info },
+];
 
-const fmtTime = (ts: string | undefined) => {
+const fmt = (ts?: string) => {
   if (!ts) return '';
-  try { return new Date(ts).toLocaleString(); } catch { return ts; }
-};
-
-const AlertCard = ({ alert, isAdmin, onAcknowledge }: { alert: any; isAdmin: boolean; onAcknowledge: (id: string) => void }) => {
-  const style = PRIORITY_STYLE[alert.priority] || PRIORITY_STYLE.low;
-  return (
-    <Box sx={{ p: 1.5, mb: 1, borderRadius: 2, background: style.bg, border: `1px solid ${style.border}` }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-        <Box sx={{ flex: 1 }}>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.5 }}>
-            <Chip label={alert.priority?.toUpperCase()} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, background: style.bg, color: style.color, border: `1px solid ${style.border}` }} />
-            <Chip label={alert.type?.replace('_', ' ')} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', color: '#94A3B8', borderColor: 'rgba(148,163,184,0.2)' }} />
-            {alert.acknowledged === 1 && <CheckIcon sx={{ fontSize: 14, color: '#2ED573' }} />}
-          </Box>
-          <Typography variant="body2" sx={{ color: '#F0F4FF', fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.4 }}>{alert.message}</Typography>
-          <Box sx={{ display: 'flex', gap: 2, mt: 0.5 }}>
-            <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.68rem' }}>{fmtTime(alert.created_at || alert.timestamp)}</Typography>
-            {alert.location && <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.68rem' }}>{alert.location}</Typography>}
-          </Box>
-        </Box>
-        {isAdmin && alert.acknowledged !== 1 && (
-          <Button size="small" variant="outlined" onClick={() => onAcknowledge(alert.id)} sx={{ fontSize: '0.65rem', py: 0.25, px: 1, minWidth: 0, flexShrink: 0, borderColor: 'rgba(46,213,115,0.3)', color: '#2ED573', '&:hover': { background: 'rgba(46,213,115,0.08)' } }}>Ack</Button>
-        )}
-      </Box>
-    </Box>
-  );
+  try {
+    return new Date(ts).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return ts;
+  }
 };
 
 export default function DisasterAlerts() {
@@ -51,62 +32,142 @@ export default function DisasterAlerts() {
   const isAdmin = profile?.role === 'admin';
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<Priority | 'all'>('all');
+  const [acking, setAcking] = useState<string | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_DISASTER_API_URL || 'http://localhost:5001';
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    try { const data = await fetchAlerts(); setAlerts(data.alerts || data || []); } catch { setAlerts([]); } finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleAcknowledge = async (alertId: string) => {
     try {
-      await axios.post(`${API_BASE_URL}/api/admin/alerts/${encodeURIComponent(alertId)}/acknowledge`, { acknowledged_by: 'admin' }, { headers: { 'X-User-Role': 'admin' } });
-      load();
-    } catch (e) { console.error('Failed to acknowledge:', e); }
+      const data: any = await fetchAlerts();
+      setAlerts(data.alerts || (Array.isArray(data) ? data : []));
+    } catch {
+      setAlerts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAlerts]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const acknowledge = async (id: string) => {
+    setAcking(id);
+    try {
+      await axios.post(
+        `${DISASTER_API_URL}/api/admin/alerts/${encodeURIComponent(id)}/acknowledge`,
+        { acknowledged_by: profile?.name || 'admin' },
+        { headers: { 'X-User-Role': 'admin' } },
+      );
+      await load();
+    } catch (e) {
+      console.error('Failed to acknowledge', e);
+    } finally {
+      setAcking(null);
+    }
   };
 
-  const filtered = filter === 'all' ? alerts : alerts.filter((a: any) => a.priority === filter);
-  const counts: Record<string, number> = ['critical', 'high', 'moderate', 'low'].reduce((acc, p) => { acc[p] = alerts.filter((a: any) => a.priority === p).length; return acc; }, {} as Record<string, number>);
+  const counts = PRIORITIES.reduce<Record<Priority, number>>(
+    (acc, p) => ({ ...acc, [p.key]: alerts.filter((a) => a.priority === p.key).length }),
+    { critical: 0, high: 0, moderate: 0, low: 0 },
+  );
+  const visible = filter === 'all' ? alerts : alerts.filter((a) => a.priority === filter);
 
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}><Typography variant="h5" sx={{ fontWeight: 800, color: '#F0F4FF' }}>Alerts &amp; Notifications</Typography><Typography variant="body2" sx={{ color: '#475569' }}>Real-time alerts generated from crowd, weather, earthquake, and traffic data</Typography></Box>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Alerts"
+        title="Alerts & notifications"
+        description="Generated in real time from crowd density, weather, seismic and traffic feeds. Click a tile to filter by priority."
+        action={
+          <button type="button" onClick={load} className={BTN} disabled={loading}>
+            <RefreshCw size={13} className={cn(loading && 'animate-spin')} /> Refresh
+          </button>
+        }
+      />
 
-      <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {[{ label: 'Critical', key: 'critical', color: '#FF4757' }, { label: 'High', key: 'high', color: '#FFA502' }, { label: 'Moderate', key: 'moderate', color: '#FFD700' }, { label: 'Low', key: 'low', color: '#2ED573' }].map(({ label, key, color }) => (
-          <Grid item xs={6} sm={3} key={key}>
-            <Box onClick={() => setFilter(filter === key ? 'all' : key)} sx={{ p: 1.5, borderRadius: 2, textAlign: 'center', background: `${color}10`, border: `1px solid ${color}25`, cursor: 'pointer', outline: filter === key ? `2px solid ${color}` : 'none' }}>
-              <Typography variant="h4" sx={{ fontWeight: 800, color, lineHeight: 1 }}>{counts[key]}</Typography>
-              <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 600 }}>{label}</Typography>
-            </Box>
-          </Grid>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {PRIORITIES.map((p) => (
+          <StatCard
+            key={p.key}
+            label={p.label}
+            value={counts[p.key]}
+            sub={filter === p.key ? 'Filtering · click to clear' : `${p.label.toLowerCase()} priority`}
+            icon={p.icon}
+            color={riskColor(p.key)}
+            active={filter === p.key}
+            onClick={() => setFilter(filter === p.key ? 'all' : p.key)}
+          />
         ))}
-      </Grid>
+      </div>
 
-      <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-            <Typography variant="subtitle2" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.7rem', letterSpacing: 1 }}>
-              {filter === 'all' ? `SHOWING ALL ${alerts.length} ALERTS` : `SHOWING ${filtered.length} ${filter.toUpperCase()} ALERTS`}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button size="small" onClick={() => setFilter('all')} sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>Show All</Button>
-              <Button size="small" onClick={load} sx={{ fontSize: '0.7rem', color: '#c4b5fd' }}>Refresh</Button>
-            </Box>
-          </Box>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress sx={{ color: '#c4b5fd' }} size={32} /></Box>
-          ) : filtered.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}><Typography variant="body2" sx={{ color: '#2ED573', fontWeight: 600 }}>No {filter === 'all' ? '' : filter} alerts — System operating normally</Typography></Box>
-          ) : (
-            filtered.map((alert: any, i: number) => <AlertCard key={alert.id || i} alert={alert} isAdmin={isAdmin} onAcknowledge={handleAcknowledge} />)
-          )}
-        </CardContent>
-      </Card>
-    </Box>
+      <Panel>
+        <PanelHeader
+          title={filter === 'all' ? `All alerts · ${alerts.length}` : `${filter} alerts · ${visible.length}`}
+          meta={isAdmin ? 'Acknowledge an alert once the control room has acted on it.' : undefined}
+          action={
+            filter !== 'all' && (
+              <button type="button" className={BTN} onClick={() => setFilter('all')}>
+                Show all
+              </button>
+            )
+          }
+        />
+
+        {loading ? (
+          <div className="flex items-center justify-center py-14 text-muted-foreground">
+            <Loader2 className="size-5 animate-spin text-brand-400" />
+          </div>
+        ) : visible.length === 0 ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title={filter === 'all' ? 'No alerts · system operating normally' : `No ${filter} alerts`}
+            hint="New alerts appear here automatically as the monitoring loop runs."
+          />
+        ) : (
+          <div className="space-y-2">
+            {visible.map((a, i) => {
+              const color = riskColor(a.priority);
+              const acked = a.acknowledged === 1 || a.acknowledged === true;
+              return (
+                <article
+                  key={a.id || i}
+                  className="group relative flex gap-4 overflow-hidden rounded-xl border px-4 py-3 transition-colors"
+                  style={{ borderColor: tint(color, 0.25), background: tint(color, acked ? 0.04 : 0.07) }}
+                >
+                  <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Pill color={color}>{a.priority}</Pill>
+                      {a.type && <Mono className="rounded-full border border-border/70 px-2 py-0.5">{String(a.type).replace(/_/g, ' ')}</Mono>}
+                      {acked && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-400">
+                          <Check size={11} /> acknowledged
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[13.5px] font-medium leading-snug text-foreground">{a.message}</p>
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <span>{fmt(a.created_at || a.timestamp)}</span>
+                      {a.location && <span>{a.location}</span>}
+                    </div>
+                  </div>
+                  {isAdmin && !acked && (
+                    <button
+                      type="button"
+                      disabled={acking === a.id}
+                      onClick={() => acknowledge(a.id)}
+                      className={cn(BTN, 'self-center border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/10')}
+                    >
+                      {acking === a.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Acknowledge
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }

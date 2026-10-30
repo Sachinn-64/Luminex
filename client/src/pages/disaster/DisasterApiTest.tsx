@@ -108,7 +108,7 @@ export default function DisasterApiTest() {
             <AccordionDetails>
               <Grid container spacing={2}>
                 {eps.map(ep => (
-                  <Grid item xs={12} key={ep.url}>
+                  <Grid key={ep.url} size={{ xs: 12 }}>
                     <Card sx={{ background: 'rgba(10,11,18,0.6)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 2 }}>
                       <CardContent>
                         <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>

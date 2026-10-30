@@ -1,413 +1,478 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useRef } from 'react';
-import { Grid, Card, CardContent, Typography, Box, CircularProgress, Alert, LinearProgress, Chip, ToggleButton, ToggleButtonGroup } from '@mui/material';
-import {
-  ReportProblem as AlertIcon, Groups as CrowdIcon, WbSunny as WeatherIcon,
-  DirectionsCar as TrafficIcon, FiberManualRecord as DotIcon,
-} from '@mui/icons-material';
-import { MapContainer, TileLayer, Circle, Popup, Marker, Polyline, LayerGroup, Tooltip as LeafletTooltip } from 'react-leaflet';
-import L from 'leaflet';
+import { useEffect, useMemo, useState } from 'react';
+import { Circle, LayerGroup, Marker, Polyline, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import axios from 'axios';
+import {
+  Activity, AlertTriangle, Car, CloudSun, Droplets, Eye, Gauge, ShieldCheck, Thermometer, Users, Waves, Wind,
+} from 'lucide-react';
 import { useDisasterData } from '../../context/DisasterDataContext';
-import 'leaflet/dist/leaflet.css';
+import { Bar, EmptyState, ErrorBanner, Mono, Panel, PanelHeader, Pill, Spinner, StatCard } from '../../components/disaster/ui';
+import { riskColor, tint } from '../../components/disaster/tokens';
+import { MapChip, MapFrame } from '../../components/disaster/map';
+import { parseCoords, pinIcon } from '../../components/disaster/mapUtils';
+import { cn } from '@/lib/utils';
 
-import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
-L.Icon.Default.mergeOptions({ iconRetinaUrl, iconUrl, shadowUrl });
+const assemblyIcon = pinIcon('#10b981', '🏟');
+const quakeIcon = pinIcon('#ef4444', '〰');
 
-const createSvgIcon = (color: string, symbol: string) => L.divIcon({
-  html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:${color};border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">${symbol}</span></div>`,
-  className: '', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -34],
-});
-const assemblyIcon = createSvgIcon('#2ED573', '🏟');
-const quakeIcon = createSvgIcon('#FF4757', '🌊');
-const RISK_STYLE: Record<string, { fillColor: string; color: string }> = { critical: { fillColor: '#FF4757', color: '#FF4757' }, high: { fillColor: '#FFA502', color: '#FFA502' }, moderate: { fillColor: '#FFD700', color: '#FFD700' }, low: { fillColor: '#2ED573', color: '#2ED573' } };
-const CONGESTION_STYLE: Record<string, { color: string; weight: number }> = { severe: { color: '#FF4757', weight: 4 }, high: { color: '#FFA502', weight: 3 }, moderate: { color: '#FFD700', weight: 2.5 }, low: { color: '#2ED573', weight: 2 } };
-
-const RISK_COLORS: Record<string, string> = { critical: '#FF4757', high: '#FFA502', moderate: '#FFD700', low: '#2ED573' };
-const riskColor = (level?: string) => RISK_COLORS[level?.toLowerCase() || ''] || RISK_COLORS.low;
 const fmtTime = (ts?: string) => {
   if (!ts) return '';
-  try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
 };
 
-const KpiCard = ({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: any; sub: string; accent: string }) => (
-  <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: `1px solid ${accent}20`, position: 'relative', overflow: 'hidden', borderRadius: 3 }}>
-    <Box sx={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: accent, borderRadius: '4px 0 0 4px' }} />
-    <CardContent sx={{ pl: 2.5, py: 1.5, '&:last-child': { pb: 1.5 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 600, fontSize: '0.68rem', letterSpacing: 0.5 }}>{label}</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: '#F0F4FF', lineHeight: 1.1, mt: 0.25 }}>{value}</Typography>
-          <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.7rem' }}>{sub}</Typography>
-        </Box>
-        <Box sx={{ width: 40, height: 40, borderRadius: 2, background: `${accent}15`, border: `1px solid ${accent}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent }}>{icon}</Box>
-      </Box>
-    </CardContent>
-  </Card>
-);
+type LayerKey = 'crowd' | 'traffic' | 'assembly' | 'quakes' | 'routes';
+const LAYERS: { key: LayerKey; label: string; color: string }[] = [
+  { key: 'crowd', label: 'Crowd', color: '#10b981' },
+  { key: 'traffic', label: 'Traffic', color: '#f59e0b' },
+  { key: 'assembly', label: 'Assembly', color: '#22d3ee' },
+  { key: 'quakes', label: 'Quakes', color: '#ef4444' },
+  { key: 'routes', label: 'Evac routes', color: '#a78bfa' },
+];
 
-const AlertItem = ({ alert }: { alert: any }) => {
-  const color = riskColor(alert.priority);
-  return (
-    <Box sx={{ display: 'flex', gap: 1.5, py: 1, borderBottom: '1px solid rgba(255,255,255,0.04)', '&:last-child': { borderBottom: 'none' } }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, mt: 0.6, boxShadow: alert.priority === 'critical' ? `0 0 8px ${color}` : 'none' }} />
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="body2" sx={{ color: '#F0F4FF', fontWeight: 600, fontSize: '0.78rem', lineHeight: 1.3 }}>{alert.message || alert.type || 'Alert'}</Typography>
-        <Box sx={{ display: 'flex', gap: 1, mt: 0.25, alignItems: 'center' }}>
-          <Chip label={alert.priority?.toUpperCase()} size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, background: `${color}15`, color, border: `1px solid ${color}30` }} />
-          <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.65rem' }}>{fmtTime(alert.created_at || alert.timestamp)}</Typography>
-        </Box>
-      </Box>
-    </Box>
-  );
-};
+/* ------------------------------------------------------------------ */
+/*  Map                                                                 */
+/* ------------------------------------------------------------------ */
 
-const ZoneRow = ({ zone }: { zone: any }) => {
-  const density = zone.current_density || 0;
-  const color = riskColor(zone.risk_level);
-  return (
-    <Box sx={{ py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.04)', '&:last-child': { borderBottom: 'none' } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.4 }}>
-        <Typography variant="caption" sx={{ color: '#CBD5E1', fontWeight: 600, fontSize: '0.73rem' }}>{zone.name}</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="caption" sx={{ color, fontWeight: 700, fontSize: '0.7rem' }}>{(density * 100).toFixed(0)}%</Typography>
-          <DotIcon sx={{ fontSize: 8, color }} />
-        </Box>
-      </Box>
-      <LinearProgress variant="determinate" value={density * 100} sx={{ height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.06)', '& .MuiLinearProgress-bar': { background: `linear-gradient(90deg, ${color}80, ${color})` } }} />
-    </Box>
-  );
-};
-
-const WeatherSummary = ({ weather }: { weather: any }) => {
-  if (!weather?.temperature) return null;
-  return (
-    <Box sx={{ p: 1.5, borderRadius: 2, background: 'rgba(30,58,138,0.15)', border: '1px solid rgba(59,130,246,0.2)' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: '#F0F4FF', lineHeight: 1 }}>{Math.round(weather.temperature)}°C</Typography>
-          <Typography variant="caption" sx={{ color: '#94A3B8', textTransform: 'capitalize' }}>{weather.description}</Typography>
-        </Box>
-        <WeatherIcon sx={{ fontSize: 36, color: '#FFB74D' }} />
-      </Box>
-      <Grid container spacing={1}>
-        {[
-          { label: 'Humidity', value: `${weather.humidity}%` },
-          { label: 'Wind', value: `${Math.round(weather.wind_speed)} m/s` },
-          { label: 'Visibility', value: `${((weather.visibility || 10000) / 1000).toFixed(1)} km` },
-          { label: 'Feels like', value: `${Math.round(weather.feels_like)}°C` },
-        ].map(({ label, value }) => (
-          <Grid key={label} item xs={6}>
-            <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.65rem', fontWeight: 600 }}>{label}</Typography>
-            <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 600, fontSize: '0.75rem' }}>{value}</Typography>
-          </Grid>
-        ))}
-      </Grid>
-    </Box>
-  );
-};
-
-const TrafficStatus = ({ traffic }: { traffic: any }) => {
-  if (!traffic?.routes) return null;
-  const overall = traffic.overall_conditions?.overall_level || 'good';
-  const tColors: Record<string, string> = { good: '#2ED573', moderate: '#FFD700', poor: '#FFA502', severe: '#FF4757' };
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 600, fontSize: '0.7rem', letterSpacing: 0.5 }}>TRAFFIC CONDITIONS</Typography>
-        <Chip label={overall.toUpperCase()} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, background: `${tColors[overall] || '#2ED573'}15`, color: tColors[overall] || '#2ED573', border: `1px solid ${tColors[overall] || '#2ED573'}30` }} />
-      </Box>
-      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-        {traffic.routes.slice(0, 4).map((route: any) => {
-          const c = tColors[route.congestion_level] || '#2ED573';
-          return (
-            <Box key={route.id} sx={{ flex: '1 1 48%', p: 0.75, borderRadius: 1.5, background: `${c}08`, border: `1px solid ${c}20` }}>
-              <Typography variant="caption" sx={{ color: '#CBD5E1', fontSize: '0.65rem', fontWeight: 600, display: 'block' }}>{route.name.split(' ').slice(0, 3).join(' ')}</Typography>
-              <Typography variant="caption" sx={{ color: c, fontSize: '0.65rem', fontWeight: 700 }}>{route.current_travel_time}min • {route.status === 'open' ? 'OPEN' : 'CLOSED'}</Typography>
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-};
-
-const QuakeList = ({ earthquakes }: { earthquakes: any }) => {
-  const quakes = earthquakes?.earthquakes?.slice(0, 4) || [];
-  if (quakes.length === 0) return <Typography variant="caption" sx={{ color: '#4A5568' }}>No recent seismic activity</Typography>;
-  return (
-    <Box>
-      {quakes.map((q: any, i: number) => (
-        <Box key={i} sx={{ display: 'flex', gap: 1.5, py: 0.5, borderBottom: '1px solid rgba(255,255,255,0.04)', '&:last-child': { borderBottom: 'none' } }}>
-          <Box sx={{ width: 32, height: 32, borderRadius: 1.5, background: q.magnitude >= 4 ? 'rgba(255,71,87,0.15)' : 'rgba(255,165,2,0.1)', border: `1px solid ${q.magnitude >= 4 ? 'rgba(255,71,87,0.3)' : 'rgba(255,165,2,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.7rem', color: q.magnitude >= 4 ? '#FF4757' : '#FFA502' }}>M{q.magnitude?.toFixed(1)}</Typography>
-          </Box>
-          <Box>
-            <Typography variant="caption" sx={{ color: '#CBD5E1', fontSize: '0.72rem', fontWeight: 600, display: 'block', lineHeight: 1.2 }}>{q.place || q.location || 'Unknown location'}</Typography>
-            <Typography variant="caption" sx={{ color: '#4A5568', fontSize: '0.65rem' }}>{q.depth?.toFixed(0)} km deep • {fmtTime(q.time)}</Typography>
-          </Box>
-        </Box>
-      ))}
-    </Box>
-  );
-};
-
-const RiskGauge = ({ score, level }: { score: number; level: string }) => {
-  const color = riskColor(level);
-  return (
-    <Box sx={{ textAlign: 'center', p: 1 }}>
-      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <CircularProgress variant="determinate" value={score} size={90} thickness={5} sx={{ color, filter: `drop-shadow(0 0 8px ${color}60)` }} />
-        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography variant="h5" sx={{ fontWeight: 800, color, lineHeight: 1 }}>{score}</Typography>
-          <Typography sx={{ fontSize: '0.55rem', color: '#94A3B8', fontWeight: 600, letterSpacing: 0.4 }}>/100</Typography>
-        </Box>
-      </Box>
-      <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color, fontWeight: 700, fontSize: '0.7rem', letterSpacing: 1 }}>{level?.toUpperCase()} RISK</Typography>
-      <Box sx={{ mt: 1.5, textAlign: 'left' }}>
-        {['crowd', 'weather', 'earthquake', 'traffic'].map(key => {
-          const val = Math.round(score * 0.5);
-          return (
-            <Box key={key} sx={{ mb: 0.6 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.2 }}>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.65rem', textTransform: 'capitalize' }}>{key}</Typography>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.65rem' }}>{val}</Typography>
-              </Box>
-              <LinearProgress variant="determinate" value={Math.min(100, val)} sx={{ height: 3, bgcolor: 'rgba(255,255,255,0.06)', '& .MuiLinearProgress-bar': { background: `linear-gradient(90deg, ${color}60, ${color})` } }} />
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-};
-
-const DashboardMap = ({ data, cityConfig, apiBaseUrl }: { data: any; cityConfig: any; apiBaseUrl: string }) => {
-  const [layers, setLayers] = useState(['crowd', 'traffic', 'emergency']);
+function LiveMap({ data, city, apiBaseUrl }: { data: any; city: any; apiBaseUrl: string }) {
+  const [layers, setLayers] = useState<LayerKey[]>(['crowd', 'traffic', 'assembly']);
   const [assemblyPoints, setAssemblyPoints] = useState<any[]>([]);
-  const [evacuationRoutes, setEvacuationRoutes] = useState<any[]>([]);
-  const mapRef = useRef<any>(null);
+  const [evacRoutes, setEvacRoutes] = useState<any[]>([]);
 
   useEffect(() => {
-    axios.get(`${apiBaseUrl}/api/assembly-points`).then(res => setAssemblyPoints(res.data.assembly_points || [])).catch(() => {});
-    axios.get(`${apiBaseUrl}/api/evacuation-routes`).then(res => setEvacuationRoutes(res.data.all_routes || [])).catch(() => {});
+    axios.get(`${apiBaseUrl}/api/assembly-points`).then((r) => setAssemblyPoints(r.data.assembly_points || [])).catch(() => {});
+    axios.get(`${apiBaseUrl}/api/evacuation-routes`).then((r) => setEvacRoutes(r.data.all_routes || [])).catch(() => {});
   }, [apiBaseUrl]);
 
-  if (!data) return <Box sx={{ height: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,24,39,0.8)', borderRadius: 2 }}><CircularProgress sx={{ color: '#c4b5fd' }} /></Box>;
+  const toggle = (k: LayerKey) => setLayers((ls) => (ls.includes(k) ? ls.filter((l) => l !== k) : [...ls, k]));
 
-  const center: [number, number] = cityConfig ? [cityConfig.lat, cityConfig.lon] : [17.6784, 75.3294];
-  const zoom = cityConfig?.zoom || 13;
-  const crowdZones = data.crowd?.zones || [];
-  const trafficRoutes = data.traffic?.routes || [];
-  const earthquakes = (data.earthquakes?.earthquakes || []).slice(0, 5);
-  const parsedRoutes = evacuationRoutes.map((r: any) => {
-    let coords: any[] = [];
-    try { coords = typeof r.coordinates === 'string' ? JSON.parse(r.coordinates) : (r.coordinates || []); } catch {}
-    return { ...r, parsedCoords: coords };
-  });
+  const center: [number, number] = city ? [city.lat, city.lon] : [17.6784, 75.3294];
+  const crowdZones: any[] = data?.crowd?.zones || [];
+  const trafficRoutes: any[] = data?.traffic?.routes || [];
+  const quakes: any[] = (data?.earthquakes?.earthquakes || []).slice(0, 5);
+  const parsedRoutes = useMemo(() => evacRoutes.map((r) => ({ ...r, coords: parseCoords(r.coordinates) })), [evacRoutes]);
 
   return (
-    <Box sx={{ position: 'relative', height: '100%', width: '100%', borderRadius: 2, overflow: 'hidden' }}>
-      {/* Layer toggles */}
-      <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <Box sx={{ background: 'rgba(11,15,26,0.9)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,181,253,0.2)', borderRadius: 2, p: 1 }}>
-          <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', mb: 0.5, fontWeight: 600 }}>LAYERS</Typography>
-          <ToggleButtonGroup orientation="vertical" value={layers} onChange={(_, v) => v && setLayers(v)} size="small" sx={{ '& .MuiToggleButton-root': { color: '#94A3B8', border: '1px solid rgba(196,181,253,0.1)', borderRadius: '6px !important', mb: 0.5, py: 0.4, px: 1, fontSize: '0.65rem', fontWeight: 600, gap: 0.5, justifyContent: 'flex-start', '&.Mui-selected': { color: '#c4b5fd', background: 'rgba(196,181,253,0.12)', borderColor: 'rgba(196,181,253,0.3)' } } }}>
-            <ToggleButton value="crowd"><Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#2ED573', mr: 0.5 }} />Crowd</ToggleButton>
-            <ToggleButton value="traffic"><Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#FFA502', mr: 0.5 }} />Traffic</ToggleButton>
-            <ToggleButton value="emergency"><Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#FF4757', mr: 0.5 }} />Assembly</ToggleButton>
-            <ToggleButton value="quakes"><Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#c4b5fd', mr: 0.5 }} />Quakes</ToggleButton>
-            <ToggleButton value="routes"><Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#7C83FD', mr: 0.5 }} />Evac Routes</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-      </Box>
-      {/* Title */}
-      <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, background: 'rgba(11,15,26,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,181,253,0.2)', borderRadius: 2, px: 1.5, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: '#c4b5fd', fontWeight: 700, fontSize: '0.75rem' }}>LIVE {cityConfig?.name?.toUpperCase() || 'CITY'} MONITOR</Typography>
-        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4757', animation: 'pulse 1.5s infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />
-          <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.65rem' }}>{crowdZones.length} zones monitored</Typography>
-        </Box>
-      </Box>
-      <MapContainer center={center} zoom={zoom} ref={mapRef} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' maxZoom={20} />
-        {layers.includes('crowd') && <LayerGroup>{crowdZones.map((zone: any) => {
-          const coords = zone.coordinates; if (!coords || coords.length < 2) return null;
-          const style = RISK_STYLE[zone.risk_level] || RISK_STYLE.low;
-          return <Circle key={zone.id} center={[coords[0], coords[1]]} radius={600} pathOptions={{ fillColor: style.fillColor, fillOpacity: 0.35, color: style.color, weight: 2 }}>
-            <LeafletTooltip sticky><strong>{zone.name}</strong></LeafletTooltip>
-            <Popup><Box sx={{ minWidth: 160 }}><Typography variant="subtitle2" fontWeight="bold" gutterBottom>{zone.name}</Typography><Typography variant="body2">Density: {(zone.current_density * 100).toFixed(1)}%</Typography><Typography variant="body2">Count: {(zone.capacity * zone.current_density).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</Typography><Typography variant="body2">Capacity: {zone.capacity?.toLocaleString()}</Typography><Typography variant="body2" sx={{ color: style.color, fontWeight: 'bold', mt: 0.5 }}>Risk: {zone.risk_level?.toUpperCase()}</Typography></Box></Popup>
-          </Circle>;
-        })}</LayerGroup>}
-        {layers.includes('traffic') && <LayerGroup>{trafficRoutes.map((route: any) => {
-          const start = route.start_coords; const end = route.end_coords; if (!start || !end) return null;
-          const style = CONGESTION_STYLE[route.congestion_level] || CONGESTION_STYLE.low;
-          return <Polyline key={route.id} positions={[[start[0], start[1]], [end[0], end[1]]]} pathOptions={{ color: style.color, weight: style.weight, opacity: 0.85, dashArray: route.status === 'closed' ? '8,6' : undefined }}>
-            <Popup><Box><Typography variant="subtitle2" fontWeight="bold">{route.name}</Typography><Typography variant="body2">Travel: {route.current_travel_time} min{route.current_travel_time > route.normal_travel_time ? ` (+${route.current_travel_time - route.normal_travel_time} delay)` : ''}</Typography><Typography variant="body2">Distance: {route.distance_km} km</Typography><Typography variant="body2" sx={{ color: style.color, fontWeight: 'bold' }}>{route.congestion_level?.toUpperCase()} CONGESTION</Typography></Box></Popup>
-          </Polyline>;
-        })}</LayerGroup>}
-        {layers.includes('emergency') && <LayerGroup>{assemblyPoints.filter((p: any) => p.coordinates?.length >= 2).map((point: any) => (
-          <Marker key={point.id} position={[point.coordinates[0], point.coordinates[1]]} icon={assemblyIcon}>
-            <Popup><Box><Typography variant="subtitle2" fontWeight="bold">{point.name}</Typography><Typography variant="body2" color="success.main" fontWeight="bold">Assembly Point</Typography><Typography variant="body2">Capacity: {(point.capacity || 0).toLocaleString()}</Typography></Box></Popup>
-          </Marker>
-        ))}</LayerGroup>}
-        {layers.includes('quakes') && <LayerGroup>{earthquakes.filter((q: any) => q.latitude && q.longitude).map((quake: any, i: number) => (
-          <Marker key={i} position={[quake.latitude, quake.longitude]} icon={quakeIcon}>
-            <Popup><Box><Typography variant="subtitle2" fontWeight="bold">M{quake.magnitude?.toFixed(1)} Earthquake</Typography><Typography variant="body2">{quake.place || quake.location}</Typography><Typography variant="body2">Depth: {quake.depth?.toFixed(1)} km</Typography></Box></Popup>
-          </Marker>
-        ))}</LayerGroup>}
-        {layers.includes('routes') && <LayerGroup>{parsedRoutes.filter((r: any) => r.parsedCoords?.length >= 2).map((route: any, i: number) => (
-          <Polyline key={`evac-${i}`} positions={route.parsedCoords.map((c: any) => [c[0] || c.lat, c[1] || c.lon])} pathOptions={{ color: '#7C83FD', weight: 3, opacity: 0.8, dashArray: '6, 4' }}>
-            <Popup><Box><Typography variant="subtitle2" fontWeight="bold">{route.name}</Typography><Typography variant="body2">Type: {route.route_type}</Typography></Box></Popup>
-          </Polyline>
-        ))}</LayerGroup>}
-      </MapContainer>
-    </Box>
+    <MapFrame
+      center={center}
+      zoom={city?.zoom || 14}
+      height={540}
+      overlay={
+        <>
+          <div className="pointer-events-none absolute left-3 top-3 z-[1000]">
+            <MapChip>
+              <div className="flex items-center gap-2">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-400 opacity-70" />
+                  <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+                </span>
+                <Mono className="text-white/80">Live · {city?.name || 'City'} monitor</Mono>
+              </div>
+              <div className="mt-1 text-[11.5px] text-white/60">{crowdZones.length} zones · {trafficRoutes.length} corridors</div>
+            </MapChip>
+          </div>
+          <div className="pointer-events-none absolute right-3 top-3 z-[1000]">
+            <MapChip className="p-1.5">
+              <div className="flex flex-col gap-1">
+                {LAYERS.map((l) => {
+                  const on = layers.includes(l.key);
+                  return (
+                    <button
+                      key={l.key}
+                      type="button"
+                      onClick={() => toggle(l.key)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11.5px] font-medium transition-colors',
+                        on ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80',
+                      )}
+                    >
+                      <span className="size-2 rounded-full" style={{ background: on ? l.color : 'rgba(255,255,255,.25)' }} />
+                      {l.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </MapChip>
+          </div>
+        </>
+      }
+    >
+      {layers.includes('crowd') && (
+        <LayerGroup>
+          {crowdZones.map((z) => {
+            const c = z.coordinates;
+            if (!c || c.length < 2) return null;
+            const color = riskColor(z.risk_level);
+            return (
+              <Circle key={z.id} center={[c[0], c[1]]} radius={520} pathOptions={{ color, fillColor: color, fillOpacity: 0.28, weight: 1.5 }}>
+                <LeafletTooltip sticky>{z.name}</LeafletTooltip>
+                <Popup>
+                  <strong>{z.name}</strong>
+                  <br />Density {(z.current_density * 100).toFixed(0)}% · {Math.round(z.capacity * z.current_density).toLocaleString()} people
+                  <br />Capacity {z.capacity?.toLocaleString()}
+                  <br /><span style={{ color, fontWeight: 700 }}>{String(z.risk_level).toUpperCase()} RISK</span>
+                </Popup>
+              </Circle>
+            );
+          })}
+        </LayerGroup>
+      )}
+      {layers.includes('traffic') && (
+        <LayerGroup>
+          {trafficRoutes.map((r) => {
+            if (!r.start_coords || !r.end_coords) return null;
+            const color = riskColor(r.congestion_level);
+            return (
+              <Polyline
+                key={r.id}
+                positions={[[r.start_coords[0], r.start_coords[1]], [r.end_coords[0], r.end_coords[1]]]}
+                pathOptions={{ color, weight: 4, opacity: 0.9, dashArray: r.status === 'closed' ? '8,6' : undefined }}
+              >
+                <Popup>
+                  <strong>{r.name}</strong>
+                  <br />{r.current_travel_time} min travel · {r.distance_km} km
+                  <br /><span style={{ color, fontWeight: 700 }}>{String(r.congestion_level).toUpperCase()} CONGESTION</span>
+                </Popup>
+              </Polyline>
+            );
+          })}
+        </LayerGroup>
+      )}
+      {layers.includes('assembly') && (
+        <LayerGroup>
+          {assemblyPoints.filter((p) => p.coordinates?.length >= 2).map((p) => (
+            <Marker key={p.id} position={[p.coordinates[0], p.coordinates[1]]} icon={assemblyIcon}>
+              <Popup>
+                <strong>{p.name}</strong>
+                <br />Assembly point · capacity {(p.capacity || 0).toLocaleString()}
+              </Popup>
+            </Marker>
+          ))}
+        </LayerGroup>
+      )}
+      {layers.includes('quakes') && (
+        <LayerGroup>
+          {quakes.filter((q) => q.latitude && q.longitude).map((q, i) => (
+            <Marker key={i} position={[q.latitude, q.longitude]} icon={quakeIcon}>
+              <Popup>
+                <strong>M{q.magnitude?.toFixed(1)} earthquake</strong>
+                <br />{q.place || q.location}
+                <br />Depth {q.depth?.toFixed(1)} km
+              </Popup>
+            </Marker>
+          ))}
+        </LayerGroup>
+      )}
+      {layers.includes('routes') && (
+        <LayerGroup>
+          {parsedRoutes.filter((r) => r.coords.length >= 2).map((r) => (
+            <Polyline key={`evac-${r.id}`} positions={r.coords} pathOptions={{ color: '#a78bfa', weight: 3, opacity: 0.9, dashArray: '6,5' }}>
+              <Popup>
+                <strong>{r.name}</strong>
+                <br />{r.route_type} route · {r.status}
+              </Popup>
+            </Polyline>
+          ))}
+        </LayerGroup>
+      )}
+    </MapFrame>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Side widgets                                                        */
+/* ------------------------------------------------------------------ */
+
+function RiskRing({ score, level }: { score: number; level: string }) {
+  const color = riskColor(level);
+  const r = 44;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score));
+  return (
+    <div className="relative size-[112px] shrink-0">
+      <svg viewBox="0 0 112 112" className="size-full -rotate-90">
+        <circle cx="56" cy="56" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-foreground/[0.08]" />
+        <circle
+          cx="56" cy="56" r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (c * pct) / 100}
+          style={{ filter: `drop-shadow(0 0 8px ${tint(color, 0.6)})`, transition: 'stroke-dashoffset .8s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-heading text-[28px] font-bold leading-none" style={{ color }}>{Math.round(score)}</span>
+        <Mono className="mt-1">/ 100</Mono>
+      </div>
+    </div>
+  );
+}
+
+const FACTOR_META: Record<string, { label: string; icon: typeof Users }> = {
+  crowd_risk: { label: 'Crowd', icon: Users },
+  weather_risk: { label: 'Weather', icon: CloudSun },
+  earthquake_risk: { label: 'Earthquake', icon: Waves },
+  traffic_risk: { label: 'Traffic', icon: Car },
 };
+
+/* ------------------------------------------------------------------ */
+/*  Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function DisasterDashboard() {
   const { dashboardData, loading, error, selectedCity, availableCities, API_BASE_URL } = useDisasterData();
-  const cityConfig = availableCities.find(c => c.id === selectedCity);
+  const city = availableCities.find((c) => c.id === selectedCity);
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-        <Box sx={{ textAlign: 'center' }}>
-          <CircularProgress sx={{ color: '#c4b5fd' }} size={48} />
-          <Typography variant="body2" sx={{ color: '#94A3B8', mt: 2 }}>Loading intelligence data...</Typography>
-        </Box>
-      </Box>
-    );
-  }
+  if (loading) return <Spinner label="Loading intelligence feed" />;
+  if (error) return <ErrorBanner>{error}</ErrorBanner>;
 
-  if (error) {
-    return <Alert severity="error" sx={{ background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.3)', color: '#FF6B76' }}>{error}</Alert>;
-  }
-
-  const alerts: any[] = (dashboardData.alerts as any)?.alerts || dashboardData.alerts as any[] || [];
-  const criticalAlerts = alerts.filter((a: any) => a.priority === 'critical');
-  const crowdZones = (dashboardData.crowd as any)?.zones || [];
-  const overallMetrics = (dashboardData.crowd as any)?.overall_metrics || {};
-  const riskScore: any = dashboardData.risk_score;
-  const weather: any = dashboardData.weather;
-  const traffic: any = dashboardData.traffic;
-  const earthquakes: any = dashboardData.earthquakes;
-
-  const tempVal = weather?.temperature != null ? `${Math.round(weather.temperature)}°C` : '--';
-  const crowdVal = overallMetrics.current_occupancy != null ? overallMetrics.current_occupancy.toLocaleString() : '--';
-  const crowdPct = overallMetrics.occupancy_percentage != null ? `${overallMetrics.occupancy_percentage.toFixed(0)}% capacity` : '';
-  const openRoutes = traffic?.overall_conditions?.open_routes ?? '--';
-  const quakeCount = earthquakes?.earthquakes?.length ?? 0;
+  const alerts: any[] = (dashboardData.alerts as any)?.alerts || (dashboardData.alerts as any[]) || [];
+  const critical = alerts.filter((a) => a.priority === 'critical');
+  const crowd: any = dashboardData.crowd || {};
+  const zones: any[] = crowd.zones || [];
+  const metrics: any = crowd.overall_metrics || {};
+  const risk: any = dashboardData.risk_score || {};
+  const weather: any = dashboardData.weather || {};
+  const traffic: any = dashboardData.traffic || {};
+  const quakes: any[] = (dashboardData.earthquakes as any)?.earthquakes || [];
+  const riskLevel = String(risk.risk_level || 'low');
+  const score = Number(risk.overall_score || 0);
+  const trafficLevel = String(traffic.overall_conditions?.overall_level || 'good');
 
   return (
-    <Box>
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: '#F0F4FF', letterSpacing: -0.3 }}>
-            {cityConfig?.name ? `${cityConfig.name} Operations Center` : 'Operations Center'}
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#475569' }}>
-            {cityConfig?.display_name} • <span style={{ color: '#c4b5fd' }}>Live</span>
-          </Typography>
-        </Box>
-        {criticalAlerts.length > 0 && (
-          <Box sx={{ px: 2, py: 0.5, borderRadius: 6, background: 'rgba(255,71,87,0.12)', border: '1px solid rgba(255,71,87,0.35)', display: 'flex', alignItems: 'center', gap: 1, animation: 'pulse 2s infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } } }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#FF4757' }} />
-            <Typography variant="caption" sx={{ color: '#FF4757', fontWeight: 700 }}>{criticalAlerts.length} CRITICAL ALERT{criticalAlerts.length > 1 ? 'S' : ''}</Typography>
-          </Box>
-        )}
-      </Box>
+    <div className="space-y-5">
+      {/* heading */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Mono className="mb-2 block">Live overview</Mono>
+          <h1 className="font-heading text-[26px] font-bold leading-tight tracking-[-0.01em]">
+            {city?.name || 'City'} operations center
+          </h1>
+          <p className="mt-1 text-[13.5px] text-muted-foreground">
+            {city?.display_name} · refreshed {fmtTime(dashboardData.timestamp as string) || 'just now'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {critical.length > 0 ? (
+            <Pill color="#ef4444" className="animate-pulse">{critical.length} critical alert{critical.length > 1 ? 's' : ''}</Pill>
+          ) : (
+            <Pill color="#10b981">All systems nominal</Pill>
+          )}
+        </div>
+      </div>
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        {[
-          { icon: <AlertIcon sx={{ fontSize: 20 }} />, label: 'RISK SCORE', value: riskScore?.overall_score ?? '--', sub: `${riskScore?.risk_level?.toUpperCase() || 'LOW'} level`, accent: riskColor(riskScore?.risk_level) },
-          { icon: <CrowdIcon sx={{ fontSize: 20 }} />, label: 'CROWD', value: crowdVal, sub: crowdPct, accent: '#818CF8' },
-          { icon: <AlertIcon sx={{ fontSize: 20 }} />, label: 'ACTIVE ALERTS', value: alerts.length, sub: `${criticalAlerts.length} critical`, accent: criticalAlerts.length > 0 ? '#FF4757' : '#2ED573' },
-          { icon: <WeatherIcon sx={{ fontSize: 20 }} />, label: 'TEMPERATURE', value: tempVal, sub: weather?.description || 'N/A', accent: '#FFB74D' },
-          { icon: <TrafficIcon sx={{ fontSize: 20 }} />, label: 'OPEN ROUTES', value: openRoutes, sub: `${traffic?.overall_conditions?.total_routes ?? 0} total`, accent: '#2ED573' },
-        ].map(kpi => (
-          <Grid item xs={6} sm={4} md={2.4} key={kpi.label}>
-            <KpiCard {...kpi} />
-          </Grid>
-        ))}
-      </Grid>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <StatCard label="Risk score" value={Math.round(score)} sub={`${riskLevel} level`} icon={Gauge} color={riskColor(riskLevel)} />
+        <StatCard
+          label="Crowd"
+          value={metrics.current_occupancy != null ? Number(metrics.current_occupancy).toLocaleString() : '—'}
+          sub={metrics.occupancy_percentage != null ? `${Math.round(metrics.occupancy_percentage)}% of capacity` : 'no data'}
+          icon={Users}
+          color="#6366f1"
+        />
+        <StatCard
+          label="Active alerts"
+          value={alerts.length}
+          sub={`${critical.length} critical`}
+          icon={AlertTriangle}
+          color={critical.length ? '#ef4444' : '#10b981'}
+        />
+        <StatCard
+          label="Temperature"
+          value={weather.temperature != null ? `${Math.round(weather.temperature)}°` : '—'}
+          sub={weather.description || 'no data'}
+          icon={Thermometer}
+          color="#f59e0b"
+        />
+        <StatCard
+          label="Open routes"
+          value={traffic.overall_conditions?.open_routes ?? '—'}
+          sub={`${traffic.overall_conditions?.total_routes ?? 0} corridors · ${trafficLevel}`}
+          icon={Car}
+          color={riskColor(trafficLevel)}
+        />
+      </div>
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        {/* Live Map */}
-        <Grid item xs={12} lg={8}>
-          <Card sx={{ height: 500, p: 0, overflow: 'hidden', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <DashboardMap data={dashboardData} cityConfig={cityConfig} apiBaseUrl={API_BASE_URL} />
-          </Card>
-        </Grid>
+      {/* map + side column */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <LiveMap data={dashboardData} city={city} apiBaseUrl={API_BASE_URL} />
 
-        {/* Side panels: Risk + Alerts */}
-        <Grid item xs={12} lg={4}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
-            <Card sx={{ background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-              <CardContent sx={{ py: 1.5, px: 2 }}>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.65rem', letterSpacing: 1 }}>COMPOSITE RISK INDEX</Typography>
-                <RiskGauge score={riskScore?.overall_score || 0} level={riskScore?.risk_level || 'low'} />
-              </CardContent>
-            </Card>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+          <Panel>
+            <PanelHeader title="Composite risk index" />
+            <div className="flex items-center gap-5">
+              <RiskRing score={score} level={riskLevel} />
+              <div className="min-w-0 flex-1">
+                <Pill color={riskColor(riskLevel)}>{riskLevel} risk</Pill>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
+                  Weighted from crowd, weather, seismic and traffic signals.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {Object.entries(FACTOR_META).map(([key, meta]) => {
+                const raw = Number(risk.risk_factors?.[key] ?? 0);
+                const v = raw <= 1 ? raw * 100 : raw;
+                const color = v >= 75 ? '#ef4444' : v >= 50 ? '#f59e0b' : v >= 25 ? '#eab308' : '#10b981';
+                return (
+                  <div key={key}>
+                    <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                      <span className="flex items-center gap-1.5 text-foreground/85">
+                        <meta.icon size={12} className="text-muted-foreground" /> {meta.label}
+                      </span>
+                      <span className="font-mono text-[11px] text-muted-foreground">{Math.round(v)}</span>
+                    </div>
+                    <Bar value={v} color={color} />
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
 
-            <Card sx={{ flex: 1, background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <CardContent sx={{ py: 1.5, px: 2, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.65rem', letterSpacing: 1 }}>ALERT FEED</Typography>
-                  <Chip label={`${alerts.length} active`} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, background: alerts.length > 0 ? 'rgba(255,71,87,0.12)' : 'rgba(46,213,115,0.1)', color: alerts.length > 0 ? '#FF4757' : '#2ED573', border: `1px solid ${alerts.length > 0 ? 'rgba(255,71,87,0.25)' : 'rgba(46,213,115,0.2)'}` }} />
-                </Box>
-                <Box sx={{ overflow: 'auto', flex: 1 }}>
-                  {alerts.length > 0
-                    ? alerts.slice(0, 8).map((alert: any, i: number) => <AlertItem key={i} alert={alert} />)
-                    : <Box sx={{ textAlign: 'center', py: 3 }}><Typography variant="caption" sx={{ color: '#2ED573', fontWeight: 600 }}>All Clear — No Active Alerts</Typography></Box>
-                  }
-                </Box>
-              </CardContent>
-            </Card>
-          </Box>
-        </Grid>
-      </Grid>
+          <Panel className="flex min-h-[260px] flex-col">
+            <PanelHeader
+              title="Alert feed"
+              action={<Pill color={alerts.length ? '#ef4444' : '#10b981'}>{alerts.length} active</Pill>}
+            />
+            {alerts.length === 0 ? (
+              <EmptyState icon={ShieldCheck} title="All clear" hint="No active alerts for this city." className="flex-1 py-6" />
+            ) : (
+              <div className="-mx-2 flex-1 space-y-1 overflow-auto">
+                {alerts.slice(0, 8).map((a, i) => {
+                  const color = riskColor(a.priority);
+                  return (
+                    <div key={a.id || i} className="flex gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-foreground/[0.04]">
+                      <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+                      <div className="min-w-0">
+                        <div className="truncate text-[12.5px] font-medium text-foreground">{a.message || a.type || 'Alert'}</div>
+                        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                          <span style={{ color }}>{a.priority}</span>
+                          <span>{fmtTime(a.created_at || a.timestamp)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <CardContent sx={{ py: 1.5, px: 2 }}>
-              <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.65rem', letterSpacing: 1, display: 'block', mb: 1 }}>WEATHER STATUS</Typography>
-              <WeatherSummary weather={weather} />
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <CardContent sx={{ py: 1.5, px: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.65rem', letterSpacing: 1 }}>CROWD ZONES</Typography>
-                <Typography variant="caption" sx={{ color: '#c4b5fd', fontWeight: 700, fontSize: '0.7rem' }}>{overallMetrics.zones_at_capacity || 0} at capacity</Typography>
-              </Box>
-              {crowdZones.slice(0, 6).map((zone: any) => <ZoneRow key={zone.id} zone={zone} />)}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <CardContent sx={{ py: 1.5, px: 2 }}><TrafficStatus traffic={traffic} /></CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%', background: 'rgba(17,24,39,0.85)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3 }}>
-            <CardContent sx={{ py: 1.5, px: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700, fontSize: '0.65rem', letterSpacing: 1 }}>SEISMIC ACTIVITY</Typography>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.7rem' }}>{quakeCount} events</Typography>
-              </Box>
-              <QuakeList earthquakes={earthquakes} />
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-    </Box>
+      {/* detail row */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* weather */}
+        <Panel>
+          <PanelHeader title="Weather status" action={<CloudSun size={16} className="text-amber-400" />} />
+          {weather.temperature != null ? (
+            <>
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="font-heading text-[40px] font-bold leading-none">{Math.round(weather.temperature)}°C</div>
+                  <div className="mt-1.5 text-[12.5px] capitalize text-muted-foreground">{weather.description}</div>
+                </div>
+                <Pill color="#f59e0b" dot={false}>{weather.data_source === 'openweathermap' ? 'Live' : 'Simulated'}</Pill>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {[
+                  { icon: Droplets, label: 'Humidity', value: `${weather.humidity}%` },
+                  { icon: Wind, label: 'Wind', value: `${Math.round(weather.wind_speed || 0)} m/s` },
+                  { icon: Eye, label: 'Visibility', value: `${((weather.visibility || 10000) / 1000).toFixed(1)} km` },
+                  { icon: Thermometer, label: 'Feels like', value: `${Math.round(weather.feels_like ?? weather.temperature)}°C` },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-xl border border-border/60 bg-background/40 px-3 py-2.5 dark:border-white/[0.06]">
+                    <div className="flex items-center gap-1.5 text-muted-foreground"><m.icon size={12} /><Mono>{m.label}</Mono></div>
+                    <div className="mt-1 text-[14px] font-semibold">{m.value}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <EmptyState icon={CloudSun} title="No weather data" color="#f59e0b" />
+          )}
+        </Panel>
+
+        {/* crowd zones */}
+        <Panel>
+          <PanelHeader title="Crowd zones" action={<Pill color={metrics.zones_at_capacity ? '#ef4444' : '#6366f1'} dot={false}>{metrics.zones_at_capacity || 0} at capacity</Pill>} />
+          {zones.length === 0 ? (
+            <EmptyState icon={Users} title="No zone telemetry" color="#6366f1" />
+          ) : (
+            <div className="space-y-3.5">
+              {zones.slice(0, 6).map((z) => {
+                const d = Number(z.current_density || 0) * 100;
+                const color = riskColor(z.risk_level);
+                return (
+                  <div key={z.id}>
+                    <div className="mb-1.5 flex items-center justify-between gap-3 text-[12.5px]">
+                      <span className="truncate font-medium text-foreground/90">{z.name}</span>
+                      <span className="shrink-0 font-mono text-[11px]" style={{ color }}>{d.toFixed(0)}%</span>
+                    </div>
+                    <Bar value={d} color={color} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+
+        {/* traffic */}
+        <Panel>
+          <PanelHeader title="Traffic conditions" action={<Pill color={riskColor(trafficLevel)}>{trafficLevel}</Pill>} />
+          {!traffic.routes?.length ? (
+            <EmptyState icon={Car} title="No traffic data" color="#f59e0b" />
+          ) : (
+            <div className="space-y-2">
+              {traffic.routes.slice(0, 5).map((r: any) => {
+                const color = riskColor(r.congestion_level);
+                const delay = r.current_travel_time - r.normal_travel_time;
+                return (
+                  <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/40 px-3 py-2 dark:border-white/[0.06]">
+                    <div className="min-w-0">
+                      <div className="truncate text-[12.5px] font-medium">{r.name}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        {r.distance_km} km · {r.status}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-[14px] font-semibold" style={{ color }}>{r.current_travel_time}<span className="text-[11px] text-muted-foreground"> min</span></div>
+                      {delay > 0 && <div className="font-mono text-[10px] text-amber-400">+{delay} delay</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+
+        {/* seismic */}
+        <Panel>
+          <PanelHeader title="Seismic activity" action={<Pill color={quakes.length ? '#f59e0b' : '#10b981'} dot={false}>{quakes.length} events</Pill>} />
+          {quakes.length === 0 ? (
+            <EmptyState icon={Activity} title="No recent seismic activity" hint="Monitoring USGS feeds within 500 km." />
+          ) : (
+            <div className="space-y-2">
+              {quakes.slice(0, 4).map((q, i) => {
+                const strong = q.magnitude >= 4;
+                const color = strong ? '#ef4444' : '#f59e0b';
+                return (
+                  <div key={i} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/40 px-3 py-2 dark:border-white/[0.06]">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border font-mono text-[12px] font-bold" style={{ color, borderColor: tint(color, 0.3), background: tint(color, 0.12) }}>
+                      M{q.magnitude?.toFixed(1)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate text-[12.5px] font-medium">{q.place || q.location || 'Unknown location'}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{q.depth?.toFixed(0)} km deep · {fmtTime(q.time)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+      </div>
+    </div>
   );
 }
