@@ -2,33 +2,40 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useDisasterData } from '../context/DisasterDataContext';
 import {
   Dashboard, WbSunny, Waves, Groups, DirectionsCar,
-  NotificationsActive, Emergency, Satellite, Hiking, ArrowBack, Code, Place,
+  NotificationsActive, Emergency, Satellite, Hiking, ArrowBack, Code, Place, Insights,
 } from '@mui/icons-material';
 
 const RISK_COLORS: Record<string, string> = { critical: '#FF4757', high: '#FFA502', moderate: '#FFD700', low: '#2ED573' };
 
-const NAV_ITEMS = [
-  { label: 'Overview', icon: <Dashboard sx={{ fontSize: 18 }} />, path: '' },
+type NavItem = { label: string; icon: React.ReactElement; path: string; adminOnly?: boolean };
+
+const PREDICTION_NAV: NavItem[] = [
+  { label: 'Forecast', icon: <Insights sx={{ fontSize: 18 }} />, path: '' },
+  { label: 'Live overview', icon: <Dashboard sx={{ fontSize: 18 }} />, path: 'overview' },
   { label: 'Weather', icon: <WbSunny sx={{ fontSize: 18 }} />, path: 'weather' },
   { label: 'Earthquakes', icon: <Waves sx={{ fontSize: 18 }} />, path: 'earthquakes' },
   { label: 'Crowd', icon: <Groups sx={{ fontSize: 18 }} />, path: 'crowd' },
   { label: 'Traffic', icon: <DirectionsCar sx={{ fontSize: 18 }} />, path: 'traffic' },
-  { label: 'Alerts', icon: <NotificationsActive sx={{ fontSize: 18 }} />, path: 'alerts' },
-  { label: 'Emergency', icon: <Emergency sx={{ fontSize: 18 }} />, path: 'emergency' },
   { label: 'Satellites', icon: <Satellite sx={{ fontSize: 18 }} />, path: 'satellite' },
-  { label: 'Pilgrim Aids', icon: <Hiking sx={{ fontSize: 18 }} />, path: 'pilgrim' },
   { label: 'API Testing', icon: <Code sx={{ fontSize: 18 }} />, path: 'api-test', adminOnly: true },
-] as const;
+];
+
+const MANAGEMENT_NAV: NavItem[] = [
+  { label: 'Command centre', icon: <Emergency sx={{ fontSize: 18 }} />, path: '' },
+  { label: 'Live overview', icon: <Dashboard sx={{ fontSize: 18 }} />, path: 'overview' },
+  { label: 'Alerts', icon: <NotificationsActive sx={{ fontSize: 18 }} />, path: 'alerts' },
+  { label: 'Evacuation', icon: <Place sx={{ fontSize: 18 }} />, path: 'emergency' },
+  { label: 'Pilgrim Aids', icon: <Hiking sx={{ fontSize: 18 }} />, path: 'pilgrim' },
+];
 
 export default function DisasterLayout() {
   const { selectedCity, availableCities, changeCity, dashboardData, isAdmin } = useDisasterData();
   const location = useLocation();
   const riskLevel = (dashboardData?.risk_score as any)?.risk_level || 'low';
   const riskColor = RISK_COLORS[riskLevel?.toLowerCase()] || RISK_COLORS.low;
-  const visibleNavItems = NAV_ITEMS.filter(item => !('adminOnly' in item && item.adminOnly) || isAdmin);
-  const baseRoute = location.pathname.startsWith('/disaster-prediction')
-    ? '/disaster-prediction'
-    : '/disaster-management';
+  const isPrediction = location.pathname.startsWith('/disaster-prediction');
+  const baseRoute = isPrediction ? '/disaster-prediction' : '/disaster-management';
+  const visibleNavItems = (isPrediction ? PREDICTION_NAV : MANAGEMENT_NAV).filter(item => !item.adminOnly || isAdmin);
   const activeItem = visibleNavItems.find((item) => {
     const fullPath = item.path ? `${baseRoute}/${item.path}` : baseRoute;
     return location.pathname === fullPath || location.pathname === `${fullPath}/`;
@@ -146,7 +153,7 @@ export default function DisasterLayout() {
 
         <div style={{ padding: '8px 16px 4px', marginTop: 4 }}>
           <span style={{ color: 'hsl(var(--muted-foreground))', opacity: 0.75, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            Monitoring
+            {isPrediction ? 'Prediction' : 'Management'}
           </span>
         </div>
 

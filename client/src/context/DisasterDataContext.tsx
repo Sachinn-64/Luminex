@@ -51,7 +51,7 @@ export function useDisasterData() {
   return ctx;
 }
 
-const API_BASE_URL =  'http://localhost:5001';
+const API_BASE_URL = import.meta.env.VITE_DISASTER_API_URL || 'http://localhost:5001';
 
 export function DisasterDataProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();

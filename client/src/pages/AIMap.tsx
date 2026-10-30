@@ -1,13 +1,14 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GoogleMap, LoadScript, HeatmapLayer } from '@react-google-maps/api';
+import { GoogleMap, LoadScript } from '@react-google-maps/api';
 import ReactMarkdown from 'react-markdown';
 import {
   ArrowLeft, Globe, WifiOff, Volume2, VolumeX, Mic, MicOff,
   Search, Bot, TrafficCone, Hospital, Droplets, Siren, Shield,
   Map as MapIcon, PanelLeftClose, Loader2, Navigation,
-  X, ChevronRight, Clock, Route, Footprints,
+  X, ChevronRight, Clock, Route, Footprints, ShieldAlert, DoorOpen,
 } from 'lucide-react';
+import { useSafetyLayer } from '../hooks/useSafetyLayer';
 import './AIMap.css';
 
 const containerStyle = { width: '100%', height: '100vh' };
@@ -668,7 +669,7 @@ const MAP_CACHE_CONFIG = {
   preloadRadius: 5000,
 };
 
-const GMAPS_LIBRARIES: ('places' | 'visualization')[] = ['places', 'visualization'];
+const GMAPS_LIBRARIES: 'places'[] = ['places'];
 
 type TrafficData = {
   walkingTime: number;
@@ -716,7 +717,7 @@ const createFacilityMarkerState = (): Record<FacilityCategoryKey, google.maps.Ma
   police: [],
 });
 
-export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: number; lng: number }[] }) {
+export default function AIMap() {
   const navigate = useNavigate();
   const mapRef = useRef<google.maps.Map | null>(null);
   const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
@@ -755,6 +756,8 @@ export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: numbe
   const [, setFacilityMarkers] = useState<Record<FacilityCategoryKey, google.maps.Marker[]>>(createFacilityMarkerState);
   const [language, setLanguage] = useState<LangCode>(() => (localStorage.getItem('aimap-lang') as LangCode) || 'en');
   const [showLangMenu, setShowLangMenu] = useState(false);
+
+  const safety = useSafetyLayer(mapRef, mapLoaded, isOffline);
 
   const t = UI_STRINGS[language];
   const mapCopy = MAP_CONTEXT_COPY[language];
@@ -1150,13 +1153,33 @@ export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: numbe
     trafficLayerRef.current?.setMap(next ? mapRef.current : null);
   };
 
+  // Derived from live road congestion and crowd density reported by the disaster backend
   const analyzeTrafficAndTimes = async (): Promise<TrafficData> => {
-    const cond = { current: Math.random() > 0.5 ? 'moderate' : 'heavy', walkingSpeed: Math.random() > 0.7 ? 'normal' : 'slow', bikeSpeed: Math.random() > 0.6 ? 'normal' : 'reduced' };
-    let w = 15, b = 8;
-    if (cond.current === 'heavy') { w = Math.round(15 * 1.3); b = Math.round(8 * 1.5); }
-    else if (cond.walkingSpeed === 'slow') w = Math.round(15 * 1.2);
-    else if (cond.bikeSpeed === 'reduced') b = Math.round(8 * 1.3);
-    return { walkingTime: w, bikeTime: b, trafficLevel: cond.current, walkingSpeed: cond.walkingSpeed, bikeSpeed: cond.bikeSpeed };
+    const road = safety.layer?.traffic;
+    const maxDensity = Math.max(0, ...(safety.layer?.crowd_zones || []).map(z => z.density));
+    const current = road?.severe_congestion || road?.high_congestion ? 'heavy' : road?.overall_level && road.overall_level !== 'good' ? 'moderate' : maxDensity >= 0.7 ? 'moderate' : 'light';
+    const walkingSpeed = maxDensity >= 0.6 ? 'slow' : 'normal';
+    const bikeSpeed = current === 'light' ? 'normal' : 'reduced';
+    const w = Math.round(15 * (1 + Math.max(0, maxDensity - 0.4)));
+    const b = Math.round(8 * (current === 'heavy' ? 1.5 : current === 'moderate' ? 1.2 : 1));
+    return { walkingTime: w, bikeTime: b, trafficLevel: current, walkingSpeed, bikeSpeed };
+  };
+
+  // --- Safe exit: AI-picked assembly point that avoids active incidents ---
+  const goToSafeExit = () => {
+    const from = userLocationRef.current || DEFAULT_CENTER;
+    const dest = safety.findSafeDestination(from);
+    if (!dest) {
+      setAiSuggestion('## Safe Exit\nNo assembly point could be reached without crossing an active incident zone. **Call 112** and follow police instructions.');
+      return;
+    }
+    if (userLocationRef.current) showDirections(new google.maps.LatLng(dest.position.lat, dest.position.lng));
+    else mapRef.current?.panTo(dest.position);
+    const inside = dest.insideZones.length ? `\n\n**You are inside an incident zone (${dest.insideZones.join(', ')}). Move out calmly, away from the crowd.**` : '';
+    const avoided = `${inside}${dest.avoided.length ? `\n\n**Avoided:** ${dest.avoided.join('; ')}` : ''}`;
+    const msg = `## Safe Exit\nHead to **${dest.name}** (${Math.round(dest.distanceM)} m, capacity ${dest.capacity.toLocaleString()}). This route keeps clear of all active incident zones.${avoided}${userLocationRef.current ? '' : '\n\n_Enable location access for turn-by-turn walking directions._'}`;
+    setAiSuggestion(msg);
+    setAiSuggestionLang('en');
   };
 
   // --- AI ---
@@ -1171,7 +1194,7 @@ export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: numbe
       setTrafficData(ta);
       const langName = GEMINI_LANG_NAMES[language];
       const langInstruction = language === 'en' ? '' : `\n\nIMPORTANT: Respond ENTIRELY in ${langName}. All text, headings, and content must be in ${langName}.`;
-      const prompt = `You are an AI safety and navigation guide for pilgrims, students, and residents around ${DEFAULT_ANCHOR_QUERY}.\nA user wants advice for: "${text}".\n\nCurrent traffic: ${ta.trafficLevel}, Walking: ${ta.walkingSpeed}, Bike: ${ta.bikeSpeed}\n\nFocus on ${DEFAULT_REGION}. Mention hospitals, sanitisation spots, emergency gathering spots, and police stations whenever they help the user.\n\nProvide guidance in markdown:\n## Route Information\n**Walking Time:** ${ta.walkingTime} min\n**Bike Time:** ${ta.bikeTime} min\n## Best Route\n## Crowd Levels\n## Safety Tips\n## Nearby Facilities\n\nKeep each section concise (2-3 sentences). Use **bold** for important points.${langInstruction}`;
+      const prompt = `You are an AI safety and navigation guide for pilgrims, students, and residents around ${DEFAULT_ANCHOR_QUERY}.\nA user wants advice for: "${text}".\n\nCurrent traffic: ${ta.trafficLevel}, Walking: ${ta.walkingSpeed}, Bike: ${ta.bikeSpeed}\n\nLIVE SAFETY DATA (use it; steer the user away from incidents, crowded zones and closed routes):\n${safety.situationContext()}\n\nFocus on ${DEFAULT_REGION}. Mention hospitals, sanitisation spots, emergency gathering spots, and police stations whenever they help the user.\n\nProvide guidance in markdown:\n## Route Information\n**Walking Time:** ${ta.walkingTime} min\n**Bike Time:** ${ta.bikeTime} min\n## Best Route\n## Crowd Levels\n## Areas to Avoid\n## Safety Tips\n## Nearby Facilities\n\nKeep each section concise (2-3 sentences). Use **bold** for important points.${langInstruction}`;
       if (!GEMINI_API_KEY) {
         console.warn('[AIMap] VITE_GEMINI_API_KEY is not set; AI suggestions are disabled.');
         return t.noSuggestion;
@@ -1693,22 +1716,7 @@ export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: numbe
             gestureHandling: 'cooperative', zoomControl: true, mapTypeControl: false,
             scaleControl: true, streetViewControl: false, rotateControl: false, fullscreenControl: false,
           }}
-        >
-          {crowdPoints.length > 0 && (
-            <HeatmapLayer
-              data={crowdPoints.map(p => new google.maps.LatLng(p.lat, p.lng))}
-              options={{
-                radius: 20, opacity: 0.6,
-                gradient: [
-                  'rgba(0,255,255,0)', 'rgba(0,255,255,1)', 'rgba(0,191,255,1)', 'rgba(0,127,255,1)',
-                  'rgba(0,63,255,1)', 'rgba(0,0,255,1)', 'rgba(0,0,223,1)', 'rgba(0,0,191,1)',
-                  'rgba(0,0,159,1)', 'rgba(0,0,127,1)', 'rgba(63,0,91,1)', 'rgba(127,0,63,1)',
-                  'rgba(191,0,31,1)', 'rgba(255,0,0,1)',
-                ],
-              }}
-            />
-          )}
-        </GoogleMap>
+        />
       </LoadScript>
 
       {/* Compact bottom toolbar */}
@@ -1729,6 +1737,12 @@ export default function AIMap({ crowdPoints = [] }: { crowdPoints?: { lat: numbe
             </button>
           );
         })}
+        <button className={`aimap-bar-btn ${safety.enabled ? 'active' : ''}`} onClick={() => safety.setEnabled(v => !v)} disabled={!safety.layer} title={safety.layer ? 'Live safety layer: incidents, crowd zones, evacuation routes' : 'Safety layer unavailable (disaster backend offline)'}>
+          <ShieldAlert size={18} />
+        </button>
+        <button className="aimap-bar-btn" onClick={goToSafeExit} disabled={!safety.layer || !mapLoaded} title="Safe exit: route to the nearest assembly point avoiding incidents">
+          <DoorOpen size={18} />
+        </button>
         <button className={`aimap-bar-btn ${userLocation ? 'active' : ''}`} onClick={panToUserLocation} disabled={!userLocation} title="My Location">
           <Navigation size={18} />
         </button>

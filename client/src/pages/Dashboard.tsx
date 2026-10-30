@@ -107,9 +107,9 @@ const sidebarSections: SidebarSection[] = [
   },
   {
     title: 'Emergency',
-    roles: ['user'],
+    roles: ['user', 'admin'],
     items: [
-      { id: 'disaster-management', label: 'Disaster management', icon: AlertTriangle, route: '/disaster-management', roles: ['user'] },
+      { id: 'disaster-management', label: 'Disaster management', icon: AlertTriangle, route: '/disaster-management', roles: ['user', 'admin'] },
       { id: 'emergency-call', label: 'Emergency video call', icon: Video, route: '/emergency-call', roles: ['user'] },
     ],
   },
@@ -218,7 +218,7 @@ const featureModules: FeatureModule[] = [
   { id: 'report-missing', title: 'Report missing person', description: 'Submit a search request for a lost person.', icon: Search, hue: 'violet', badge: 'Search', route: '/report-missing', roles: ['user'] },
   { id: 'pilgrim-tracker', title: 'Pilgrim tracker', description: 'Real-time pilgrim location tracking.', icon: MapPin, hue: 'blue', badge: 'Tracking', route: '/pilgrim-tracker', roles: ['user'] },
   { id: 'ai-map', title: 'AI-guided map', description: 'AI-powered navigation and routing.', icon: Map, hue: 'emerald', badge: 'Navigation', route: '/ai-map', roles: ['user'] },
-  { id: 'disaster-management', title: 'Disaster management', description: 'Emergency response and management portal.', icon: AlertTriangle, hue: 'amber', badge: 'Emergency', route: '/disaster-management', roles: ['user'] },
+  { id: 'disaster-management', title: 'Disaster management', description: 'Emergency response and management portal.', icon: AlertTriangle, hue: 'amber', badge: 'Emergency', route: '/disaster-management', roles: ['user', 'admin'] },
   { id: 'emergency-call', title: 'Emergency video call', description: 'Request an emergency video consultation.', icon: Video, hue: 'red', badge: 'Emergency', route: '/emergency-call', roles: ['user'] },
   { id: 'doctor-registration', title: 'Register as doctor', description: 'Register yourself as a medical practitioner.', icon: UserPlus, hue: 'cyan', badge: 'Health', route: '/doctor-registration', roles: ['user'] },
   { id: 'medical-admin', title: 'Medical admin panel', description: 'Manage doctors, hospitals and the emergency queue.', icon: LayoutDashboard, hue: 'violet', badge: 'Admin', route: '/medical-admin', roles: ['medical_admin'] },

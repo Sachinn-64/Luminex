@@ -17,6 +17,8 @@ import DoctorSignup from './pages/DoctorSignup';
 import PilgrimTracker from './pages/PilgrimTracker';
 import AIMap from './pages/AIMap';
 import Analytics from './pages/Analytics';
+import DisasterPrediction from './pages/DisasterPrediction';
+import DisasterManagement from './pages/DisasterManagement';
 
 import DisasterLayout from './components/DisasterLayout';
 import DisasterDashboard from './pages/disaster/DisasterDashboard';
@@ -51,7 +53,7 @@ import PreviewAuth from './dev/PreviewAuth';
 
 function AppShell() {
   const location = useLocation();
-  const isAIMapRoute = location.pathname === '/ai-map';
+  const isAIMapRoute = location.pathname === '/ai-map' || location.pathname === '/__preview/ai-map';
   const isAuthRoute = ['/login', '/register', '/doctor-signup'].includes(location.pathname);
 
   return (
@@ -81,29 +83,22 @@ function AppShell() {
 
             {/* Disaster routes - shared across all authenticated panels */}
             <Route path="/disaster-prediction" element={<ProtectedRoute allowedRoles={['admin', 'user', 'medical_admin', 'doctor']}><DisasterDataProvider><DisasterLayout /></DisasterDataProvider></ProtectedRoute>}>
-              <Route index element={<DisasterDashboard />} />
+              <Route index element={<DisasterPrediction />} />
+              <Route path="overview" element={<DisasterDashboard />} />
               <Route path="weather" element={<DisasterWeather />} />
               <Route path="earthquakes" element={<DisasterEarthquake />} />
               <Route path="crowd" element={<DisasterCrowd />} />
               <Route path="traffic" element={<DisasterTraffic />} />
-              <Route path="alerts" element={<DisasterAlerts />} />
-              <Route path="emergency" element={<DisasterEmergency />} />
               <Route path="satellite" element={<DisasterSatellite />} />
-              <Route path="pilgrim" element={<DisasterPilgrim />} />
               <Route path="api-test" element={<DisasterApiTest />} />
             </Route>
 
             <Route path="/disaster-management" element={<ProtectedRoute allowedRoles={['admin', 'user', 'medical_admin', 'doctor']}><DisasterDataProvider><DisasterLayout /></DisasterDataProvider></ProtectedRoute>}>
-              <Route index element={<DisasterDashboard />} />
-              <Route path="weather" element={<DisasterWeather />} />
-              <Route path="earthquakes" element={<DisasterEarthquake />} />
-              <Route path="crowd" element={<DisasterCrowd />} />
-              <Route path="traffic" element={<DisasterTraffic />} />
+              <Route index element={<DisasterManagement />} />
+              <Route path="overview" element={<DisasterDashboard />} />
               <Route path="alerts" element={<DisasterAlerts />} />
               <Route path="emergency" element={<DisasterEmergency />} />
-              <Route path="satellite" element={<DisasterSatellite />} />
               <Route path="pilgrim" element={<DisasterPilgrim />} />
-              <Route path="api-test" element={<DisasterApiTest />} />
             </Route>
 
             {/* User routes */}
@@ -130,7 +125,12 @@ function AppShell() {
 
             {/* Dev-only preview of protected pages without signing in */}
             {import.meta.env.DEV && (
-              <Route path="/__preview/dashboard" element={<PreviewAuth><Dashboard /></PreviewAuth>} />
+              <>
+                <Route path="/__preview/dashboard" element={<PreviewAuth><Dashboard /></PreviewAuth>} />
+                <Route path="/__preview/disaster-prediction" element={<PreviewAuth><DisasterDataProvider><div style={{ padding: '6rem 1.5rem 2rem' }}><DisasterPrediction /></div></DisasterDataProvider></PreviewAuth>} />
+                <Route path="/__preview/disaster-management" element={<PreviewAuth><DisasterDataProvider><div style={{ padding: '6rem 1.5rem 2rem' }}><DisasterManagement /></div></DisasterDataProvider></PreviewAuth>} />
+                <Route path="/__preview/ai-map" element={<PreviewAuth><AIMap /></PreviewAuth>} />
+              </>
             )}
 
             {/* Catch-all */}

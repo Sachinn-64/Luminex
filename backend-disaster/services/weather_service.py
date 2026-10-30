@@ -127,7 +127,8 @@ class WeatherService:
                 'icon': item['weather'][0]['icon'],
                 'humidity': item['main']['humidity'],
                 'wind_speed': item['wind']['speed'],
-                'precipitation': item.get('pop', 0) * 100
+                'precipitation': item.get('pop', 0) * 100,
+                'rain_mm': item.get('rain', {}).get('3h', 0)
             })
         return {
             'forecasts': forecasts,
@@ -161,24 +162,41 @@ class WeatherService:
         }
 
     def _get_mock_forecast_data(self):
-        """Generate mock forecast data."""
+        """Generate a time-coherent mock forecast (diurnal temperature, rain spells)."""
+        import math
         forecasts = []
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        # One seeded rain spell per day so consecutive refreshes stay consistent
+        rng = random.Random(now.strftime('%Y%m%d'))
+        spell_start = rng.randint(6, 40)
+        spell_len = rng.randint(2, 5)
+        spell_peak = rng.uniform(4, 22)
         for i in range(40):
-            forecast_time = datetime.now() + timedelta(hours=i * 3)
+            forecast_time = now + timedelta(hours=i * 3)
+            hour = forecast_time.hour
+            temp = 29 + 6 * math.sin((hour - 9) / 24 * 2 * math.pi) + rng.uniform(-0.8, 0.8)
+            in_spell = spell_start <= i < spell_start + spell_len
+            rain_mm = round(spell_peak * rng.uniform(0.5, 1.0), 1) if in_spell else 0.0
+            pop = min(100, 85 + rng.uniform(0, 15)) if in_spell else rng.uniform(0, 25)
+            if in_spell:
+                temp -= 4
+            description = ('thunderstorm with rain' if rain_mm > 15 else 'moderate rain' if rain_mm > 5
+                           else 'light rain' if rain_mm > 0 else 'scattered clouds' if pop > 15 else 'clear sky')
             forecasts.append({
                 'datetime': forecast_time.isoformat(),
-                'temperature': round(random.uniform(20, 40), 1),
-                'temp_min': round(random.uniform(18, 28), 1),
-                'temp_max': round(random.uniform(30, 42), 1),
-                'description': random.choice(['clear sky', 'scattered clouds', 'light rain', 'moderate rain']),
-                'icon': '01d',
-                'humidity': random.randint(30, 90),
-                'wind_speed': round(random.uniform(1, 20), 1),
-                'precipitation': round(random.uniform(0, 60), 1)
+                'temperature': round(temp, 1),
+                'temp_min': round(temp - 1.5, 1),
+                'temp_max': round(temp + 1.5, 1),
+                'description': description,
+                'icon': '10d' if rain_mm else '01d',
+                'humidity': int(min(98, (88 if in_spell else 55) + rng.uniform(-8, 8))),
+                'wind_speed': round((9 if rain_mm > 15 else 3) + rng.uniform(0, 4), 1),
+                'precipitation': round(pop, 1),
+                'rain_mm': rain_mm
             })
         return {
             'forecasts': forecasts,
-            'location': 'Prayagraj, Uttar Pradesh',
+            'location': 'Pandharpur, Maharashtra',
             'last_updated': datetime.now().isoformat(),
             'data_source': 'mock'
         }

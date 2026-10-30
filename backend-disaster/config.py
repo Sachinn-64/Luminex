@@ -12,6 +12,12 @@ class Config:
     SENTINEL_HUB_CLIENT_ID = os.getenv('SENTINEL_HUB_CLIENT_ID', 'your_sentinel_hub_client_id_here')
     SENTINEL_HUB_CLIENT_SECRET = os.getenv('SENTINEL_HUB_CLIENT_SECRET', 'your_sentinel_hub_client_secret_here')
 
+    # Gemini (optional) — AI-written advisories for the prediction engine
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+    # Event peak days (YYYY-MM-DD, comma-separated), e.g. Ashadhi / Kartiki Ekadashi
+    EVENT_PEAK_DATES = [d for d in os.getenv('EVENT_PEAK_DATES', '').split(',') if d.strip()]
+
     # USGS doesn't require API key for public feeds, but we'll keep it for potential future use
     USGS_API_KEY = os.getenv('USGS_API_KEY', '')  # Optional for USGS public feeds
 

@@ -21,6 +21,10 @@ from services.traffic_service import TrafficService
 from services.alert_service import AlertService
 from services.satellite_service import SatelliteService
 from services.pilgrim_service import PilgrimService
+from services.prediction_service import PredictionService
+from services.incident_store import init_incident_tables
+from routes.prediction import create_prediction_blueprint
+from routes.management import create_management_blueprint, incident_from_sos
 from services.data_store import (
     init_db,
     get_emergency_contacts,
@@ -47,6 +51,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize database
 init_db()
+init_incident_tables()
 
 # Initialize services
 weather_service = WeatherService()
@@ -56,6 +61,11 @@ traffic_service = TrafficService()
 alert_service = AlertService()
 satellite_service = SatelliteService()
 pilgrim_service = PilgrimService()
+prediction_service = PredictionService(weather_service, crowd_service)
+
+app.register_blueprint(create_prediction_blueprint(config, prediction_service))
+app.register_blueprint(create_management_blueprint(
+    config, socketio, crowd_service, traffic_service, prediction_service))
 
 
 # ─── Simple Role Middleware ───────────────────────────────────────────────────
@@ -177,7 +187,7 @@ def get_crowd():
 def get_stampede_risk():
     """Get stampede risk assessment. Accepts ?city= param."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
         data = crowd_service.get_stampede_risk_assessment(city=city)
         return jsonify(data)
     except Exception as e:
@@ -279,8 +289,8 @@ def get_points():
 def get_satellite_imagery():
     """Get satellite imagery data for the selected city."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
         lat, lon = city_cfg['lat'], city_cfg['lon']
         # Build a 0.2° bounding box around the city centre
         bbox = [lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1]
@@ -294,8 +304,8 @@ def get_satellite_imagery():
 def get_flood_analysis():
     """Get flood analysis from satellite data."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
         lat, lon = city_cfg['lat'], city_cfg['lon']
         bbox = [lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1]
         data = satellite_service.get_flood_analysis(bbox=bbox, city_lat=lat, city_lon=lon)
@@ -308,8 +318,8 @@ def get_flood_analysis():
 def get_terrain_analysis():
     """Get terrain analysis from satellite data."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
         lat, lon = city_cfg['lat'], city_cfg['lon']
         bbox = [lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1]
         data = satellite_service.get_terrain_analysis(bbox=bbox, city_lat=lat, city_lon=lon)
@@ -336,8 +346,8 @@ def get_seismic_risk():
 def get_nearby_facilities():
     """Get facilities near a location."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
         lat = request.args.get('lat', city_cfg['lat'], type=float)
         lon = request.args.get('lon', city_cfg['lon'], type=float)
         facility_type = request.args.get('type', None)
@@ -367,8 +377,8 @@ def submit_sos():
         if not body:
             return jsonify({'error': 'Request body required'}), 400
 
-        city = body.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = body.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
 
         data = pilgrim_service.submit_sos(
             reporter_name=body.get('name', ''),
@@ -380,6 +390,10 @@ def submit_sos():
         )
 
         if data.get('success'):
+            data['incident_id'] = incident_from_sos(
+                data.get('report_id'), body.get('emergency_type', 'other'),
+                body.get('lat', city_cfg['lat']), body.get('lon', city_cfg['lon']),
+                body.get('description', ''), body.get('name', ''))
             socketio.emit('critical_alert', {
                 'type': 'sos',
                 'message': f"SOS Report: {body.get('emergency_type', 'Emergency')} - {body.get('description', 'No details')}",
@@ -397,8 +411,8 @@ def submit_sos():
 def get_safe_routes():
     """Get safe evacuation/navigation routes from current location."""
     try:
-        city = request.args.get('city', 'prayagraj').lower()
-        city_cfg = config.CITIES.get(city, config.CITIES['prayagraj'])
+        city = request.args.get('city', config.DEFAULT_CITY).lower()
+        city_cfg = config.CITIES.get(city, config.CITIES[config.DEFAULT_CITY])
         lat = request.args.get('lat', city_cfg['lat'], type=float)
         lon = request.args.get('lon', city_cfg['lon'], type=float)
         data = pilgrim_service.get_safe_routes(lat, lon)
@@ -480,7 +494,7 @@ def admin_update_crowd():
         zone_id = body.get('zone_id')
         density = body.get('density')
         source = body.get('source', 'admin_manual')
-        city = body.get('city', 'prayagraj')
+        city = body.get('city', config.DEFAULT_CITY)
         if not zone_id or density is None:
             return jsonify({'error': 'zone_id and density required'}), 400
         success = crowd_service.update_zone_from_external(zone_id, density, source, city)
@@ -559,7 +573,7 @@ def background_task():
 
             weather = weather_service.get_current_weather()
             earthquakes = earthquake_service.get_recent_earthquakes()
-            crowd = crowd_service.get_crowd_analytics(city='prayagraj')
+            crowd = crowd_service.get_crowd_analytics(city=config.DEFAULT_CITY)
             traffic = traffic_service.get_traffic_conditions()
 
             dashboard_data = {
@@ -596,7 +610,7 @@ if __name__ == '__main__':
     bg_thread.start()
 
     print("Trinetra - MahaKumbh Disaster Prediction System Starting...")
-    print(f"Monitoring: Prayagraj ({config.MAHAKUMBH_LAT}, {config.MAHAKUMBH_LON})")
+    print(f"Monitoring: {config.DEFAULT_CITY} ({config.MAHAKUMBH_LAT}, {config.MAHAKUMBH_LON})")
     print(f"Weather API: {'Configured' if config.OPENWEATHER_API_KEY and config.OPENWEATHER_API_KEY != 'your_openweather_api_key_here' else 'Not configured (using mock)'}")
     print(f"Google Maps API: {'Configured' if config.GOOGLE_MAPS_API_KEY and config.GOOGLE_MAPS_API_KEY != 'your_google_maps_api_key_here' else 'Not configured (using simulation)'}")
     print(f"Sentinel Hub: {'Configured' if config.SENTINEL_HUB_CLIENT_ID and config.SENTINEL_HUB_CLIENT_ID != 'your_sentinel_hub_client_id_here' else 'Not configured (using mock)'}")
