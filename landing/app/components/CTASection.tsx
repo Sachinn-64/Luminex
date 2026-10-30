@@ -107,7 +107,7 @@ export default function CTASection() {
             margin: '0 auto 56px',
           }}
         >
-          Trinetra is exclusively available for partners and early adopters. Request access to join the future of perception.
+          Luminex is exclusively available for partners and early adopters. Request access to join the future of perception.
         </motion.p>
 
         {/* CTA buttons */}
@@ -174,7 +174,7 @@ export default function CTASection() {
                 fontFamily: 'var(--font-inter)',
               }}
             >
-              TRINETRA
+              LUMINEX
             </span>
             <span
               style={{
@@ -184,7 +184,7 @@ export default function CTASection() {
                 fontFamily: 'var(--font-inter)',
               }}
             >
-              © 2026 Trinetra. All rights reserved.
+              © 2026 Luminex. All rights reserved.
             </span>
           </div>
         </motion.div>

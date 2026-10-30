@@ -1,18 +1,21 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import GradientBlinds from '@/components/GradientBlinds';
-import { Button } from '@/components/ui/button';
 import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+  AuthError,
+  AuthHeader,
+  AuthInput,
+  AuthLinks,
+  AuthPasswordInput,
+  AuthSection,
+  AuthSelect,
+  AuthShell,
+  AuthSubmit,
+  Bright,
+  Mono,
+} from '@/components/auth/AuthShell';
 
 const SPECIALIZATIONS = [
   'General Physician',
@@ -28,7 +31,7 @@ const SPECIALIZATIONS = [
   'Homeopathy',
   'Emergency Medicine',
   'Other',
-];
+] as const;
 
 export default function DoctorSignup() {
   const navigate = useNavigate();
@@ -40,7 +43,7 @@ export default function DoctorSignup() {
   // Doctor profile fields
   const [name, setName] = useState('');
   const [degree, setDegree] = useState('');
-  const [specialization, setSpecialization] = useState(SPECIALIZATIONS[0]);
+  const [specialization, setSpecialization] = useState<string>(SPECIALIZATIONS[0]);
   const [phone, setPhone] = useState('');
   const [experience, setExperience] = useState('');
 
@@ -91,158 +94,109 @@ export default function DoctorSignup() {
   };
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-sm">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-              <FieldGroup>
-                <div className="flex flex-col items-center gap-1 text-center">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground text-lg mb-1">
-                    🩺
-                  </div>
-                  <h1 className="text-2xl font-bold">Sign Up as Doctor</h1>
-                  <p className="text-sm text-balance text-muted-foreground">
-                    Create your account &amp; medical profile in one step
-                  </p>
-                </div>
+    <AuthShell topLink={{ prompt: 'Already registered?', to: '/login', label: 'Sign in' }}>
+      <AuthHeader
+        eyebrow="Doctor registration"
+        title={
+          <>
+            Join as a <Bright>doctor</Bright>
+          </>
+        }
+        subtitle="Create your account and medical profile in one step."
+      />
 
-                {/* Account Details */}
-                <FieldSeparator>Account Details</FieldSeparator>
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
+        <AuthSection step="01" title="Account" />
 
-                <Field>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="doctor@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="bg-background"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Min 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    className="bg-background"
-                  />
-                  <FieldDescription>Must be at least 6 characters long.</FieldDescription>
-                </Field>
+        <AuthInput
+          id="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="doctor@hospital.org"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
 
-                {/* Medical Profile */}
-                <FieldSeparator>Medical Profile</FieldSeparator>
+        <AuthPasswordInput
+          id="password"
+          label="Password"
+          autoComplete="new-password"
+          placeholder="Create a strong password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={6}
+          showStrength
+        />
 
-                <Field>
-                  <FieldLabel htmlFor="name">Full Name</FieldLabel>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Dr. John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    className="bg-background"
-                  />
-                </Field>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="degree">Degree / Qualification</FieldLabel>
-                    <Input
-                      id="degree"
-                      type="text"
-                      placeholder="MBBS, MD, BDS…"
-                      value={degree}
-                      onChange={(e) => setDegree(e.target.value)}
-                      required
-                      className="bg-background"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="specialization">Specialization</FieldLabel>
-                    <select
-                      id="specialization"
-                      value={specialization}
-                      onChange={(e) => setSpecialization(e.target.value)}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      {SPECIALIZATIONS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="phone">Phone Number</FieldLabel>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+91 9876543210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      required
-                      className="bg-background"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="experience">Years of Experience</FieldLabel>
-                    <Input
-                      id="experience"
-                      type="number"
-                      min={0}
-                      max={60}
-                      placeholder="5"
-                      value={experience}
-                      onChange={(e) => setExperience(e.target.value)}
-                      className="bg-background"
-                    />
-                  </Field>
-                </div>
+        <AuthSection step="02" title="Medical profile" />
 
-                {error && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
-                    <p className="m-0 text-sm text-destructive">⚠️ {error}</p>
-                  </div>
-                )}
+        <AuthInput
+          id="name"
+          label="Full name"
+          type="text"
+          autoComplete="name"
+          placeholder="Dr. Priya Mehta"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
 
-                <Field>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? 'Creating account…' : '🩺 Sign Up as Doctor'}
-                  </Button>
-                </Field>
-                <FieldSeparator>Or</FieldSeparator>
-                <Field>
-                  <FieldDescription className="text-center">
-                    Not a doctor?{' '}
-                    <Link to="/register" className="underline underline-offset-4">
-                      Register as User / Admin
-                    </Link>
-                  </FieldDescription>
-                  <FieldDescription className="text-center">
-                    Already have an account?{' '}
-                    <Link to="/login" className="underline underline-offset-4">
-                      Sign In
-                    </Link>
-                  </FieldDescription>
-                </Field>
-              </FieldGroup>
-            </form>
-          </div>
+        <div className="grid gap-7 sm:grid-cols-2 sm:gap-6">
+          <AuthInput
+            id="degree"
+            label="Qualification"
+            type="text"
+            placeholder="MBBS, MD…"
+            value={degree}
+            onChange={(e) => setDegree(e.target.value)}
+            required
+          />
+          <AuthSelect
+            id="specialization"
+            label="Specialization"
+            options={SPECIALIZATIONS}
+            value={specialization}
+            onChange={(e) => setSpecialization(e.target.value)}
+          />
         </div>
-      </div>
-      <div className="relative hidden bg-black lg:flex overflow-hidden">
-        <div className="absolute inset-0">
-          <GradientBlinds />
+
+        <div className="grid gap-7 sm:grid-cols-2 sm:gap-6">
+          <AuthInput
+            id="phone"
+            label="Phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+91 98765 43210"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+          />
+          <AuthInput
+            id="experience"
+            label="Experience"
+            hint={<Mono>years</Mono>}
+            type="number"
+            min={0}
+            max={60}
+            placeholder="5"
+            value={experience}
+            onChange={(e) => setExperience(e.target.value)}
+          />
         </div>
-      </div>
-    </div>
+
+        <AuthError message={error} />
+
+        <div className="pt-1">
+          <AuthSubmit loading={loading} loadingText="Creating profile">
+            Create doctor account
+          </AuthSubmit>
+        </div>
+
+        <AuthLinks prompt="Not a doctor?" links={[{ to: '/register', label: 'Register as pilgrim or admin' }]} />
+      </form>
+    </AuthShell>
   );
 }

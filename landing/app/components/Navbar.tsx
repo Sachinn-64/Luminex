@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import LogoMark from './LogoMark';
 
 const navLinks = ['Vision', 'Technology', 'About'];
 
@@ -51,11 +52,15 @@ export default function Navbar() {
             color: '#ffffff',
             textDecoration: 'none',
             position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
           }}
           whileHover={{ opacity: 0.75 }}
           transition={{ duration: 0.2 }}
         >
-          TRINETRA
+          <LogoMark size={26} />
+          LUMINEX
           <span
             style={{
               position: 'absolute',

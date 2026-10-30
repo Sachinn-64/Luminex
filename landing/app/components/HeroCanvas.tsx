@@ -16,7 +16,7 @@ interface Beat {
 }
 
 const BEATS: Beat[] = [
-  { headline: 'TRINETRA', subHeadline: 'Advanced Surveillance Intelligence', startPct: 0, endPct: 30 },
+  { headline: 'LUMINEX', subHeadline: 'Advanced Surveillance Intelligence', startPct: 0, endPct: 30 },
   { headline: 'Security\nReimagined', startPct: 30, endPct: 70 },
   { headline: 'The future of safety.', cta: true, startPct: 70, endPct: 100 },
 ];
@@ -275,7 +275,7 @@ export default function HeroCanvas() {
                           mixBlendMode: 'plus-lighter',
                         }}
                       >
-                        TRINETRA
+                        LUMINEX
                       </motion.h1>
                       <motion.p
                         className="mt-6 no-select"
@@ -344,7 +344,7 @@ export default function HeroCanvas() {
                         transition={{ delay: 0.4, duration: 0.6 }}
                       >
                         <button className="btn-primary">
-                          Enter Trinetra
+                          Enter Luminex
                         </button>
                       </motion.div>
                     </>

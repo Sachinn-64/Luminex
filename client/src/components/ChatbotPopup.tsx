@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mic, MicOff, Volume2, X, MessageCircle, Minimize2, Maximize2 } from 'lucide-react';
+import { Mic, MicOff, X, Minimize2, Maximize2, Send, Square, HeartPulse, Users, CloudSun, ArrowUpRight, ChevronDown } from 'lucide-react';
+import LogoMark from '@/components/LogoMark';
+import ChatOrb from '@/components/ChatOrb';
+import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
 type ChatMessage = {
@@ -594,39 +597,28 @@ CRITICAL: Your ENTIRE response must be in ${language} language only. Do not mix 
     if (e.key === "Enter" && !loading) handleSend();
   };
 
+  const languageOptions: { value: keyof typeof STT_LANG_CODES; label: string }[] = [
+    { value: 'english', label: 'English' },
+    { value: 'hindi', label: 'Hindi' },
+    { value: 'marathi', label: 'Marathi' },
+    { value: 'gujarati', label: 'Gujarati' },
+    { value: 'bengali', label: 'Bengali' },
+    { value: 'tamil', label: 'Tamil' },
+    { value: 'spanish', label: 'Spanish' },
+    { value: 'french', label: 'French' },
+    { value: 'german', label: 'German' },
+    { value: 'japanese', label: 'Japanese' },
+  ];
+
   return (
     <>
-      {/* Floating Chat Button */}
-      <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-        onClick={toggleChatbot}
-        style={{ 
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          zIndex: 9999,
-          backgroundColor: '#7c3aed',
-          color: 'white',
-          padding: '16px',
-          borderRadius: '50%',
-          border: '2px solid #6d28d9',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <MessageCircle size={24} />
-      </motion.button>
+      {/* 3D floating launcher */}
+      <ChatOrb open={isOpen} onClick={toggleChatbot} />
 
-      {/* Chatbot Popup */}
+      {/* Chat panel */}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -635,252 +627,245 @@ CRITICAL: Your ENTIRE response must be in ${language} language only. Do not mix 
                 setIsOpen(false);
                 setIsMinimized(false);
               }}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.2)',
-                zIndex: 10000,
-              }}
+              className="fixed inset-0 z-[10000] bg-black/40"
             />
-            
+
             <motion.div
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ 
-                opacity: 1, 
-                scale: 1, 
-                y: 0,
-                height: isMinimized ? 50 : 440
-              }}
-              exit={{ opacity: 0, scale: 0.8, y: 20 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              style={{
-                position: 'fixed',
-                bottom: '96px',
-                right: '24px',
-                zIndex: 10001,
-                width: '340px',
-                background: '#fff',
-                borderRadius: '16px',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                border: '1px solid rgba(124,58,237,0.3)',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
+              role="dialog"
+              aria-label="Luminex assistant"
+              initial={{ opacity: 0, y: 28, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1, height: isMinimized ? 72 : 'min(640px, calc(100vh - 9rem))' }}
+              exit={{ opacity: 0, y: 28, scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="dark fixed bottom-28 right-6 z-[10001] flex w-[400px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-[28px] border border-white/10 text-white shadow-[0_40px_120px_-30px_rgba(0,60,200,0.65),0_0_0_1px_rgba(255,255,255,0.03)_inset]"
+              style={{ background: 'linear-gradient(180deg, #0c1326 0%, #080b14 45%, #06070c 100%)' }}
             >
+              {/* ambient glows */}
+              <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-brand-500/30 blur-3xl" />
+              <div aria-hidden className="pointer-events-none absolute -left-24 top-40 size-64 rounded-full bg-brand-cyan/15 blur-3xl" />
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-cyan/80 to-transparent" />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 opacity-[0.18]"
+                style={{
+                  backgroundImage: 'radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)',
+                  backgroundSize: '20px 20px',
+                  maskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 0%, transparent 70%)',
+                  WebkitMaskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 0%, transparent 70%)',
+                }}
+              />
+
               {/* Header */}
-              <div style={{
-                background: 'linear-gradient(to right, #7c3aed, #6d28d9)',
-                padding: '12px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '24px', height: '24px', background: '#fff', borderRadius: '50%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <span style={{ color: '#7c3aed', fontWeight: 700, fontSize: '12px' }}>T</span>
-                  </div>
+              <div className="relative flex shrink-0 items-center justify-between px-5 pb-4 pt-5">
+                <div className="flex items-center gap-3.5">
+                  <span className="relative flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 via-[#2A7BFF] to-brand-cyan shadow-[0_12px_30px_-10px_rgba(0,120,255,0.9)]">
+                    <span aria-hidden className="absolute inset-0 rounded-2xl bg-white/20 [mask-image:linear-gradient(180deg,white,transparent)]" />
+                    <LogoMark size={26} className="relative drop-shadow-[0_0_6px_rgba(255,255,255,0.6)] [&_path]:stroke-white" />
+                    <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-[#0c1326] bg-emerald-400" />
+                  </span>
                   <div>
-                    <div style={{ color: '#fff', fontWeight: 700, fontSize: '13px' }}>Luminex Safety</div>
-                    {weatherData && (
-                      <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px' }}>
-                        {weatherData.temperature}°C {weatherData.city}
-                      </div>
-                    )}
+                    <p className="font-heading text-[17px] font-bold leading-none">Luminex</p>
+                    <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/45">AI safety assistant</p>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div className="flex items-center gap-1.5">
+                  {weatherData && !isMinimized && (
+                    <span className="mr-1 hidden max-w-[150px] items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/70 sm:inline-flex">
+                      <CloudSun className="size-3 shrink-0 text-brand-cyan" />
+                      <span className="truncate">{weatherData.temperature}°C · {weatherData.city}</span>
+                    </span>
+                  )}
                   <button
                     onClick={toggleMinimize}
-                    style={{
-                      padding: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '4px',
-                      border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    }}
+                    aria-label={isMinimized ? 'Expand' : 'Minimize'}
+                    className="flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                   >
-                    {isMinimized ? <Maximize2 size={12} color="#fff" /> : <Minimize2 size={12} color="#fff" />}
+                    {isMinimized ? <Maximize2 className="size-3.5" /> : <Minimize2 className="size-3.5" />}
                   </button>
                   <button
                     onClick={toggleChatbot}
-                    style={{
-                      padding: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '4px',
-                      border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    }}
+                    aria-label="Close"
+                    className="flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                   >
-                    <X size={12} color="#fff" />
+                    <X className="size-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Chat Content */}
               {!isMinimized && (
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                  {/* Language Selector */}
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid #eee', background: '#f9fafb' }}>
-                    <select
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value as keyof typeof STT_LANG_CODES)}
-                      style={{
-                        width: '100%', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '4px',
-                        padding: '4px 8px', outline: 'none', background: '#fff',
-                      }}
-                    >
-                      <option value="english">🇺🇸 English</option>
-                      <option value="spanish">🇪🇸 Spanish</option>
-                      <option value="french">🇫🇷 French</option>
-                      <option value="german">🇩🇪 German</option>
-                      <option value="hindi">🇮🇳 Hindi</option>
-                      <option value="marathi">🇮🇳 Marathi</option>
-                      <option value="gujarati">🇮🇳 Gujarati</option>
-                      <option value="bengali">🇮🇳 Bengali</option>
-                      <option value="tamil">🇮🇳 Tamil</option>
-                      <option value="japanese">🇯🇵 Japanese</option>
-                    </select>
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  {/* Language row */}
+                  <div className="relative flex shrink-0 items-center gap-3 px-5 pb-3">
+                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Reply in</span>
+                    <div className="relative min-w-0 flex-1">
+                      <div className="flex gap-1.5 overflow-x-auto pr-6 [scrollbar-width:none] [mask-image:linear-gradient(90deg,black_85%,transparent)] [&::-webkit-scrollbar]:hidden">
+                        {languageOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setLanguage(opt.value)}
+                            className={cn(
+                              'shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition-all',
+                              language === opt.value
+                                ? 'border-brand-400/60 bg-brand-500/25 text-white shadow-[0_0_0_3px_rgba(0,80,255,0.12)]'
+                                : 'border-white/10 text-white/50 hover:border-white/25 hover:text-white',
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Chat Messages */}
-                  <div style={{
-                    flex: 1, overflowY: 'auto', padding: '10px', display: 'flex',
-                    flexDirection: 'column', gap: '8px', minHeight: 0,
-                  }}>
+                  {/* Messages */}
+                  <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto border-t border-white/[0.06] px-5 py-5 [scrollbar-width:thin]">
                     {chat.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                        <Volume2 size={24} style={{ margin: '0 auto 8px', color: '#7c3aed' }} />
-                        <div style={{ fontWeight: 600, color: '#374151', fontSize: '13px', marginBottom: '4px' }}>
-                          Luminex Safety Assistant
+                      <div className="my-auto">
+                        <div className="relative mx-auto mb-5 flex size-20 items-center justify-center">
+                          <span aria-hidden className="absolute inset-0 rounded-full bg-gradient-to-br from-brand-500/40 to-brand-cyan/30 blur-xl" />
+                          <span aria-hidden className="absolute inset-1 animate-ping rounded-full border border-brand-cyan/30 [animation-duration:2.8s]" />
+                          <span className="relative flex size-16 items-center justify-center rounded-full border border-white/15 bg-white/[0.05] backdrop-blur-md">
+                            <LogoMark size={36} />
+                          </span>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                          Ask about safety tips, security, or weather.
+                        <p className="text-center font-heading text-[22px] font-bold leading-tight">
+                          Hi, I&apos;m <span className="bg-gradient-to-r from-brand-400 to-brand-cyan bg-clip-text text-transparent">Luminex</span>
+                        </p>
+                        <p className="mx-auto mt-2 max-w-[260px] text-center text-[13px] leading-relaxed text-white/55">
+                          Your on-site safety assistant. Ask me anything, or start with one of these.
+                        </p>
+                        <div className="mt-5 grid gap-2 pb-2">
+                          {[
+                            { icon: HeartPulse, text: 'Find the nearest medical help', hue: 'text-pink-400 bg-pink-500/15 border-pink-400/20' },
+                            { icon: Users, text: 'What is the crowd status right now?', hue: 'text-blue-400 bg-blue-500/15 border-blue-400/20' },
+                            { icon: CloudSun, text: "Today's weather on site", hue: 'text-amber-400 bg-amber-500/15 border-amber-400/20' },
+                          ].map((q) => (
+                            <button
+                              key={q.text}
+                              onClick={() => setInput(q.text)}
+                              className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-left transition-all hover:-translate-y-px hover:border-brand-400/50 hover:bg-white/[0.07]"
+                            >
+                              <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-xl border', q.hue)}>
+                                <q.icon className="size-4" strokeWidth={2} />
+                              </span>
+                              <span className="flex-1 text-[13px] text-white/85">{q.text}</span>
+                              <ArrowUpRight className="size-4 text-white/30 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand-cyan" />
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
 
-                    {chat.map((msg, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'flex',
-                          justifyContent: msg.sender === "user" ? "flex-end" : "flex-start",
-                        }}
-                      >
-                        <div style={{
-                          maxWidth: '85%', padding: '8px 10px', borderRadius: '10px',
-                          background: msg.sender === "user" ? '#7c3aed' : '#f3f4f6',
-                          color: msg.sender === "user" ? '#fff' : '#1f2937',
-                        }}>
-                          <div style={{
-                            fontSize: '10px', fontWeight: 600, marginBottom: '2px',
-                            opacity: 0.7,
-                          }}>
-                            {msg.sender === "user" ? "You" : "Luminex"}
-                          </div>
-                          <div style={{ fontSize: '12px', lineHeight: 1.5 }}>
-                            {msg.sender === "user" ? (
+                    {chat.map((msg, i) => {
+                      const mine = msg.sender === 'user';
+                      return (
+                        <div key={i} className={cn('flex items-end gap-2.5', mine ? 'justify-end' : 'justify-start')}>
+                          {!mine && (
+                            <span className="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-cyan shadow-[0_6px_16px_-6px_rgba(0,120,255,0.9)]">
+                              <LogoMark size={15} className="[&_path]:stroke-white" />
+                            </span>
+                          )}
+                          <div
+                            className={cn(
+                              'max-w-[80%] px-4 py-2.5 text-[13.5px] leading-relaxed',
+                              mine
+                                ? 'rounded-2xl rounded-br-md bg-gradient-to-br from-brand-500 to-[#1C6BFF] text-white shadow-[0_12px_28px_-12px_rgba(0,80,255,0.9)]'
+                                : 'rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.06] text-white/90 backdrop-blur-sm',
+                            )}
+                          >
+                            {mine ? (
                               msg.text
                             ) : (
-                              <ReactMarkdown>{msg.text}</ReactMarkdown>
+                              <div className="prose-chat">
+                                <ReactMarkdown>{msg.text}</ReactMarkdown>
+                              </div>
                             )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {loading && (
-                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                        <div style={{
-                          background: '#f3f4f6', padding: '8px 12px', borderRadius: '10px',
-                          fontSize: '12px', color: '#6b7280',
-                        }}>
-                          Analyzing...
+                      <div className="flex items-end gap-2.5">
+                        <span className="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-cyan">
+                          <LogoMark size={15} className="[&_path]:stroke-white" />
+                        </span>
+                        <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.06] px-4 py-3.5">
+                          {[0, 1, 2].map((d) => (
+                            <span
+                              key={d}
+                              className="size-1.5 animate-bounce rounded-full bg-brand-cyan"
+                              style={{ animationDelay: `${d * 0.15}s` }}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Input Area */}
-                  <div style={{
-                    padding: '10px', borderTop: '1px solid #eee', background: '#f9fafb', flexShrink: 0,
-                  }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
+                  {/* Composer */}
+                  <div className="relative shrink-0 px-4 pb-4 pt-3">
+                    <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-[#06070c] to-transparent" />
+                    <div
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-2xl border bg-white/[0.05] p-1.5 pl-4 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.8)] transition-all',
+                        isListening ? 'border-red-400/50 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]' : 'border-white/10 focus-within:border-brand-400/60 focus-within:shadow-[0_0_0_4px_rgba(0,80,255,0.14)]',
+                      )}
+                    >
                       <input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyPress}
-                        style={{
-                          flex: 1, fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px',
-                          padding: '6px 10px', outline: 'none', background: '#fff', color: '#1f2937',
-                        }}
-                        placeholder="Ask about safety, security..."
+                        placeholder={isListening ? 'Listening… speak now' : 'Message Luminex'}
                         disabled={loading || isListening}
+                        className="min-w-0 flex-1 bg-transparent text-[13.5px] text-white outline-none placeholder:text-white/35 disabled:opacity-60"
                       />
-                      <button 
-                        onClick={handleSend} 
-                        disabled={loading || !input.trim()} 
-                        style={{
-                          padding: '6px 12px', background: '#7c3aed', color: '#fff',
-                          borderRadius: '6px', border: 'none', cursor: 'pointer',
-                          fontSize: '12px', opacity: loading || !input.trim() ? 0.5 : 1,
-                        }}
-                      >
-                        {loading ? "..." : "Send"}
-                      </button>
-                    </div>
-                    
-                    {/* Voice Button */}
-                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center' }}>
                       <button
                         onClick={toggleVoice}
                         disabled={loading}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '6px',
-                          padding: '8px 16px', borderRadius: '8px', border: 'none',
-                          cursor: loading ? 'not-allowed' : 'pointer',
-                          color: '#fff', fontSize: '13px', fontWeight: 500,
-                          background: isListening ? '#ef4444' : isSpeaking ? '#3b82f6' : 'linear-gradient(to right, #7c3aed, #6d28d9)',
-                          backgroundColor: isListening ? '#ef4444' : isSpeaking ? '#3b82f6' : '#7c3aed',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                        }}
-                      >
-                        {isListening ? (
-                          <><MicOff size={16} /> Stop Listening</>
-                        ) : isSpeaking ? (
-                          <><Volume2 size={16} /> Stop Speaking</>
-                        ) : (
-                          <><Mic size={16} /> Voice Chat</>
+                        aria-label={isListening ? 'Stop listening' : isSpeaking ? 'Stop speaking' : 'Voice chat'}
+                        className={cn(
+                          'relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                          isListening
+                            ? 'bg-red-500 text-white'
+                            : isSpeaking
+                              ? 'bg-brand-cyan text-black'
+                              : 'text-white/60 hover:bg-white/10 hover:text-white',
                         )}
+                      >
+                        {isListening && <span aria-hidden className="absolute inset-0 animate-ping rounded-xl bg-red-500/50" />}
+                        {isListening ? <MicOff className="relative size-4" /> : isSpeaking ? <Square className="relative size-3.5" /> : <Mic className="relative size-4" />}
+                      </button>
+                      <button
+                        onClick={handleSend}
+                        disabled={loading || !input.trim()}
+                        aria-label="Send"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-cyan text-white shadow-[0_10px_24px_-8px_rgba(0,80,255,0.95)] transition-all hover:brightness-110 disabled:opacity-35 disabled:shadow-none"
+                      >
+                        <Send className="size-4" />
                       </button>
                     </div>
-                    
-                    {isListening && (
-                      <p style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px', textAlign: 'center' }}>
-                        🎤 Listening... Speak now!
-                      </p>
-                    )}
-                    {isSpeaking && (
-                      <p style={{ fontSize: '11px', color: '#2563eb', marginTop: '4px', textAlign: 'center' }}>
-                        🔊 Speaking...
-                      </p>
-                    )}
+                    <p className="mt-2.5 text-center font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/30">
+                      {isListening ? (
+                        <span className="text-red-400">● Listening</span>
+                      ) : isSpeaking ? (
+                        <span className="text-brand-cyan">● Speaking</span>
+                      ) : (
+                        'Powered by Gemini · Voice in 10 languages'
+                      )}
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* Minimized State */}
               {isMinimized && (
-                <div style={{
-                  height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#f5f3ff',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#6d28d9', fontSize: '12px', fontWeight: 500 }}>Ready</span>
-                    <div style={{
-                      width: '6px', height: '6px', background: '#22c55e', borderRadius: '50%',
-                    }} />
-                  </div>
-                </div>
+                <button
+                  onClick={toggleMinimize}
+                  className="relative -mt-2 flex h-6 w-full items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/45 transition-colors hover:text-white"
+                >
+                  Tap to expand
+                  <ChevronDown className="size-3 rotate-180" />
+                </button>
               )}
             </motion.div>
           </>

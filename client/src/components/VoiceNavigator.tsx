@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Mic, MicOff, X, AudioLines, CornerUpLeft, LayoutDashboard, Map } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -125,6 +128,24 @@ export default function VoiceNavigator() {
   const [lastHeard, setLastHeard] = useState<string>('');
   const [speechLang] = useState<string>(() => getSpeechLangFromTranslateCode());
   const [statusText, setStatusText] = useState<string>('Voice navigation is ready.');
+  const [expanded, setExpanded] = useState<boolean>(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setExpanded(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpanded(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [expanded]);
 
   const commandMap = useMemo<VoiceCommand[]>(
     () => [
@@ -288,48 +309,164 @@ export default function VoiceNavigator() {
     return null;
   }
 
+  const isError = statusText.startsWith('Voice error');
+  const examples: { label: string; icon: typeof Mic }[] = [
+    { label: 'Dashboard', icon: LayoutDashboard },
+    { label: 'AI guided map', icon: Map },
+    { label: 'Go back', icon: CornerUpLeft },
+  ];
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: '1rem',
-        bottom: '1rem',
-        zIndex: 80,
-        width: 'min(88vw, 320px)',
-        borderRadius: '0.75rem',
-        border: '1px solid hsl(var(--border))',
-        background: 'hsl(var(--card))',
-        color: 'hsl(var(--card-foreground))',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25)',
-        padding: '0.7rem',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
-        <strong style={{ fontSize: '0.85rem' }}>Voice Navigation</strong>
-        <button
-          type="button"
-          onClick={isListening ? stopListening : startListening}
-          style={{
-            borderRadius: '999px',
-            border: '1px solid hsl(var(--border))',
-            padding: '0.3rem 0.7rem',
-            cursor: 'pointer',
-            background: isListening ? '#ef4444' : 'hsl(var(--secondary))',
-            color: isListening ? '#ffffff' : 'hsl(var(--secondary-foreground))',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-          }}
-          aria-label={isListening ? 'Stop voice navigation' : 'Start voice navigation'}
-        >
-          {isListening ? 'Stop Mic' : 'Start Mic'}
-        </button>
-      </div>
-      <p style={{ marginTop: '0.45rem', marginBottom: 0, fontSize: '0.74rem', opacity: 0.9 }}>{statusText}</p>
-      {lastHeard && (
-        <p style={{ marginTop: '0.3rem', marginBottom: 0, fontSize: '0.72rem', opacity: 0.8 }}>
-          Heard: "{lastHeard}"
-        </p>
-      )}
+    <div ref={rootRef} className="relative">
+      {/* navbar icon button (always visible, toggles the card) */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-label={expanded ? 'Close voice navigation' : 'Open voice navigation'}
+        aria-expanded={expanded}
+        title="Voice navigation"
+        className={cn(
+          'relative flex size-8 items-center justify-center rounded-none border transition-colors',
+          isListening
+            ? 'border-red-400/60 bg-red-500/15 text-red-400'
+            : expanded
+              ? 'border-foreground bg-foreground text-background'
+              : 'border-border bg-background text-foreground/80 hover:border-foreground/40 hover:text-foreground',
+        )}
+      >
+        {isListening && <span aria-hidden className="absolute inset-0 animate-ping rounded-none bg-red-500/25" />}
+        {isListening ? <AudioLines className="relative size-4" /> : <Mic className="relative size-4" />}
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          /* ---------- expanded card ---------- */
+          <motion.div
+            key="card"
+            role="dialog"
+            aria-label="Voice navigation"
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+            className="dark absolute right-0 top-[calc(100%+12px)] z-[90] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[24px] border border-white/10 p-5 text-white shadow-[0_40px_120px_-30px_rgba(0,60,200,0.65)]"
+            style={{ background: 'linear-gradient(180deg, #0c1326 0%, #080b14 55%, #06070c 100%)' }}
+          >
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-brand-500/30 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-cyan/80 to-transparent" />
+
+            {/* header */}
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="font-heading text-[16px] font-bold leading-none">Voice navigation</p>
+                <p className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/45">
+                  <span className={cn('size-1.5 rounded-full', isListening ? 'bg-red-400' : isError ? 'bg-amber-400' : 'bg-emerald-400')} />
+                  {isListening ? 'Listening' : isError ? 'Error' : 'Ready'} · {speechLang}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                aria-label="Collapse voice navigation"
+                className="flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* mic */}
+            <div className="relative mt-5 flex flex-col items-center">
+              <button
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                aria-label={isListening ? 'Stop voice navigation' : 'Start voice navigation'}
+                className="group relative flex size-[76px] items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute inset-0 rounded-full blur-xl transition-opacity',
+                    isListening ? 'bg-red-500/50 opacity-100' : 'bg-brand-500/50 opacity-70 group-hover:opacity-100',
+                  )}
+                />
+                {isListening && (
+                  <>
+                    <span aria-hidden className="absolute inset-0 animate-ping rounded-full border border-red-400/50 [animation-duration:1.6s]" />
+                    <span aria-hidden className="absolute -inset-2 animate-ping rounded-full border border-red-400/25 [animation-duration:2.2s]" />
+                  </>
+                )}
+                <span
+                  className={cn(
+                    'relative flex size-full items-center justify-center rounded-full border transition-all',
+                    isListening
+                      ? 'border-red-300/40 bg-gradient-to-br from-red-500 to-rose-600 shadow-[0_16px_40px_-12px_rgba(239,68,68,0.9)]'
+                      : 'border-white/20 bg-gradient-to-br from-brand-500 to-brand-cyan shadow-[0_16px_40px_-12px_rgba(0,120,255,0.9)] group-hover:scale-105',
+                  )}
+                >
+                  {isListening ? (
+                    <span className="flex h-6 items-end gap-[3px]">
+                      {[0, 1, 2, 3, 4].map((b) => (
+                        <span
+                          key={b}
+                          className="w-[3px] rounded-full bg-white"
+                          style={{ animation: `voice-bar 0.9s ease-in-out ${b * 0.12}s infinite`, height: '40%' }}
+                        />
+                      ))}
+                    </span>
+                  ) : (
+                    <Mic className="size-7 text-white" strokeWidth={2} />
+                  )}
+                </span>
+              </button>
+              <p className="mt-3 text-[13px] font-medium">{isListening ? 'Listening… say a page name' : 'Tap to start listening'}</p>
+              <p className={cn('mt-1 max-w-[260px] text-center text-[12px] leading-relaxed', isError ? 'text-amber-300' : 'text-white/50')}>
+                {statusText}
+              </p>
+            </div>
+
+            {/* heard */}
+            <AnimatePresence>
+              {lastHeard && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="relative mt-4 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2"
+                >
+                  <AudioLines className="size-3.5 shrink-0 text-brand-cyan" />
+                  <span className="truncate text-[12.5px] text-white/85">&ldquo;{lastHeard}&rdquo;</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* examples */}
+            <div className="relative mt-4 border-t border-white/[0.06] pt-3">
+              <p className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/35">Try saying</p>
+              <div className="flex flex-wrap gap-1.5">
+                {examples.map((ex) => (
+                  <span
+                    key={ex.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11.5px] text-white/70"
+                  >
+                    <ex.icon className="size-3 text-brand-cyan" />
+                    {ex.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {isListening && (
+              <button
+                type="button"
+                onClick={stopListening}
+                className="relative mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] text-[12.5px] font-medium text-white/80 transition-colors hover:bg-white/10"
+              >
+                <MicOff className="size-3.5" /> Stop listening
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

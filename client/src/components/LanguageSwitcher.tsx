@@ -143,31 +143,18 @@ export default function LanguageSwitcher() {
       />
       <label
         htmlFor="site-language"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          border: '1px solid hsl(var(--border))',
-          borderRadius: '0.5rem',
-          padding: '0.25rem 0.4rem',
-          background: 'hsl(var(--background))',
-          color: 'hsl(var(--foreground))',
-        }}
+        className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-foreground"
       >
-        <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Lang</span>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-3.5 opacity-70" fill="none" stroke="currentColor" strokeWidth="1.6">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        </svg>
         <select
           id="site-language"
           value={selectedLanguage}
           onChange={(event) => handleLanguageChange(event.target.value)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'inherit',
-            colorScheme: 'dark',
-            fontSize: '0.75rem',
-            outline: 'none',
-            minWidth: '5.75rem',
-          }}
+          className="cursor-pointer bg-transparent pr-1 text-[12px] font-medium outline-none"
+          style={{ colorScheme: 'dark' }}
           aria-label="Select website language"
         >
           {LANGUAGE_OPTIONS.map((option) => (

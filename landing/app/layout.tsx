@@ -10,9 +10,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Trinetra — See Beyond the Visible",
-  description: "Trinetra is the all-seeing intelligence layer for next-generation perception. Experience vision, reimagined.",
-  keywords: ["Trinetra", "vision technology", "AI perception", "neural vision"],
+  title: "Luminex — See Beyond the Visible",
+  description: "Luminex is the all-seeing intelligence layer for next-generation perception. Experience vision, reimagined.",
+  keywords: ["Luminex", "vision technology", "AI perception", "neural vision"],
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({

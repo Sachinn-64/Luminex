@@ -31,9 +31,9 @@ interface Footer2Props {
 
 const Footer2 = ({
   logo = {
-    src: "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/block-1.svg",
-    alt: "Trinetra",
-    title: "Trinetra",
+    src: "/logo-infinity.svg",
+    alt: "Luminex",
+    title: "Luminex",
     url: "/",
   },
   className,
@@ -76,7 +76,7 @@ const Footer2 = ({
       ],
     },
   ],
-  copyright = "© 2026 Trinetra. All rights reserved.",
+  copyright = "© 2026 Luminex. All rights reserved.",
   bottomLinks = [
     { text: "Terms and Conditions", url: "#" },
     { text: "Privacy Policy", url: "#" },
@@ -107,7 +107,7 @@ const Footer2 = ({
                       src={logo.src}
                       alt={logo.alt}
                       title={logo.title}
-                      className="h-10 dark:invert"
+                      className="h-7 w-auto"
                     />
                     <LogoText className="text-xl">{logo.title}</LogoText>
                   </Logo>

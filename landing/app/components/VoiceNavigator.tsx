@@ -153,13 +153,13 @@ export default function VoiceNavigator() {
       {
         keywords: ['sign in', 'login', 'dashboard', 'लॉगिन', 'প্রবেশ', 'లాగిన్'],
         action: () => {
-          window.location.href = 'http://localhost:5173/#/login';
+          window.location.href = 'http://localhost:5173/login';
         },
       },
       {
-        keywords: ['open app', 'open trinetra app', 'ऐप खोलो', 'অ্যাপ খুলুন', 'యాప్ ఓపెన్'],
+        keywords: ['open app', 'open luminex app', 'open trinetra app', 'ऐप खोलो', 'অ্যাপ খুলুন', 'యాప్ ఓపెన్'],
         action: () => {
-          window.location.href = 'http://localhost:5173/#/dashboard';
+          window.location.href = 'http://localhost:5173/dashboard';
         },
       },
       {
@@ -172,7 +172,7 @@ export default function VoiceNavigator() {
           'ഗൈഡഡ് മാപ്പ്', 'മാപ്പ്', 'ਗਾਈਡਡ ਮੈਪ', 'ਨਕਸ਼ਾ', 'ଗାଇଡେଡ୍ ମ୍ୟାପ୍', 'ମାନଚିତ୍ର',
         ],
         action: () => {
-          window.location.href = 'http://localhost:5173/#/ai-map';
+          window.location.href = 'http://localhost:5173/ai-map';
         },
       },
     ],

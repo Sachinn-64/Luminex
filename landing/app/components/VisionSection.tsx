@@ -82,7 +82,7 @@ export default function VisionSection() {
             marginBottom: '48px',
           }}
         >
-          Trinetra enables intelligent surveillance with real-time threat detection, weapon recognition, and crowd analytics for{' '}
+          Luminex enables intelligent surveillance with real-time threat detection, weapon recognition, and crowd analytics for{' '}
           <span
             style={{
               background: 'linear-gradient(135deg, #0050FF, #00D6FF)',
@@ -132,7 +132,7 @@ export default function VisionSection() {
               color: 'rgba(255,255,255,0.45)',
             }}
           >
-            In a world saturated with images and signals, true intelligence lies not in what you see — but in how you see. Trinetra was built to give machines the gift of genuine perception.
+            In a world saturated with images and signals, true intelligence lies not in what you see — but in how you see. Luminex was built to give machines the gift of genuine perception.
           </p>
           <p
             style={{

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DisasterDataProvider } from './context/DisasterDataContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -43,66 +43,22 @@ import MedicalHospitals from './pages/medical/MedicalHospitals';
 
 import EmergencyCall from './pages/EmergencyCall';
 
-import GooeyNav from './components/GooeyNav';
-import { Footer2 } from './components/Footer2';
+import SiteNav from './components/SiteNav';
+import SiteFooter from './components/SiteFooter';
 import { ThemeProvider } from "@/components/theme-provider"
-import { ModeToggle } from './components/mode-toggle';
-import { Avatar, AvatarFallback } from './components/ui/avatar';
-import { useAuth } from './context/AuthContext';
 import ChatbotPopup from './components/ChatbotPopup';
-import LanguageSwitcher from './components/LanguageSwitcher';
-import VoiceNavigator from './components/VoiceNavigator';
-
-const navItems = [
-  { label: 'Home', href: 'http://localhost:3000/' },
-  { label: 'Dashboard', href: '#/dashboard' },
-  { label: 'About', href: '#' },
-];
-
-function NavBar() {
-  const { profile, logout } = useAuth();
-  const navigate = useNavigate();
-  return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, display: 'flex', alignItems: 'center', paddingTop: '1rem', paddingLeft: '1.5rem', paddingRight: '1.5rem' }}>
-      <a href="http://localhost:3000" className="notranslate" style={{ color: 'hsl(var(--foreground))', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const, width: '100px' }}>LUMINEX</a>
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-        <GooeyNav
-          items={navItems}
-          particleCount={15}
-          particleDistances={[90, 10]}
-          particleR={100}
-          initialActiveIndex={1}
-          animationTime={600}
-          timeVariance={300}
-          colors={[1, 2, 3, 1, 2, 3, 1, 4]}
-        />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', width: '260px', justifyContent: 'flex-end' }}>
-        <LanguageSwitcher />
-        <ModeToggle />
-        {profile && (
-          <Avatar style={{ cursor: 'pointer' }} onClick={async () => { await logout(); navigate('/login'); }}>
-            <AvatarFallback>
-              {profile.name
-                ? profile.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-                : '?'}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </div>
-    </div>
-  );
-}
+import PreviewAuth from './dev/PreviewAuth';
 
 function AppShell() {
   const location = useLocation();
   const isAIMapRoute = location.pathname === '/ai-map';
+  const isAuthRoute = ['/login', '/register', '/doctor-signup'].includes(location.pathname);
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <AuthProvider>
         <div style={{ minHeight: '100vh', background: 'hsl(var(--background))' }}>
-          {!isAIMapRoute && <NavBar />}
+          {!isAIMapRoute && <SiteNav dark={isAuthRoute} />}
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
@@ -172,12 +128,16 @@ function AppShell() {
               <Route path="hospitals" element={<MedicalHospitals />} />
             </Route>
 
+            {/* Dev-only preview of protected pages without signing in */}
+            {import.meta.env.DEV && (
+              <Route path="/__preview/dashboard" element={<PreviewAuth><Dashboard /></PreviewAuth>} />
+            )}
+
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-          {!isAIMapRoute && <Footer2 />}
+          {!isAIMapRoute && <SiteFooter dark={isAuthRoute} />}
           {!isAIMapRoute && <ChatbotPopup/>}
-          {!isAIMapRoute && <VoiceNavigator />}
         </div>
       </AuthProvider>
     </ThemeProvider>

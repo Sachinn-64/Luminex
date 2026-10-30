@@ -18,6 +18,7 @@ export interface GradientBlindsProps {
   distortAmount?: number;
   shineDirection?: 'left' | 'right';
   mixBlendMode?: string;
+  fallbackBackground?: string;
 }
 
 const MAX_COLORS = 8;
@@ -54,7 +55,8 @@ const GradientBlinds: React.FC<GradientBlindsProps> = ({
   spotlightOpacity = 1,
   distortAmount = 0,
   shineDirection = 'left',
-  mixBlendMode = 'lighten'
+  mixBlendMode = 'lighten',
+  fallbackBackground = 'linear-gradient(135deg, #5227FF 0%, #FF9FFC 100%)'
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -392,7 +394,7 @@ void main() {
       ref={containerRef}
       className={`w-full h-full overflow-hidden relative ${className}`}
       style={{
-        background: 'linear-gradient(135deg, #5227FF 0%, #FF9FFC 100%)',
+        background: fallbackBackground,
         ...(mixBlendMode && {
           mixBlendMode: mixBlendMode as React.CSSProperties['mixBlendMode']
         })

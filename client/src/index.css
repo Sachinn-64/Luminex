@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Martian+Mono:wght@300;400;500&family=Bitter:wght@500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -84,4 +84,17 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+/* Chat assistant markdown */
+.prose-chat p { margin: 0 0 0.5em; }
+.prose-chat p:last-child { margin-bottom: 0; }
+.prose-chat ul, .prose-chat ol { margin: 0.25em 0 0.5em 1.1em; padding: 0; }
+.prose-chat li { margin: 0.15em 0; }
+.prose-chat strong { color: #fff; font-weight: 600; }
+.prose-chat code { font-family: "Martian Mono", ui-monospace, monospace; font-size: 0.85em; background: rgba(255,255,255,0.08); padding: 0.1em 0.35em; border-radius: 4px; }
+
+/* Voice navigator waveform */
+@keyframes voice-bar {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
 }

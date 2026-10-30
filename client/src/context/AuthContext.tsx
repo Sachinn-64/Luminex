@@ -28,6 +28,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+export { AuthContext };
+export type { AuthContextType, UserProfile };
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

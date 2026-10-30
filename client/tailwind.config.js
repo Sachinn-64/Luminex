@@ -10,9 +10,24 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Space Grotesk', 'sans-serif'],
+        mono: ['"Martian Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        heading: ['Bitter', 'Belgrano', 'Georgia', 'serif'],
       },
       colors: {
         void: '#050508',
+        brand: {
+          DEFAULT: '#0050FF',
+          50: '#EEF3FF',
+          100: '#D9E4FF',
+          200: '#B3C9FF',
+          300: '#7FA3FF',
+          400: '#4A7DFF',
+          500: '#0050FF',
+          600: '#0040D6',
+          700: '#0033AD',
+          cyan: '#00D6FF',
+          violet: '#7C3AED',
+        },
         surface: '#0a0b12',
         card: '#12142a',
         border: 'hsl(var(--border))',
@@ -52,11 +67,21 @@ export default {
       },
       animation: {
         'pulse-dot': 'pulse-dot 1.6s ease-in-out infinite',
+        'auth-float': 'auth-float 7s ease-in-out infinite',
+        'auth-shimmer': 'auth-shimmer 2.4s linear infinite',
       },
       keyframes: {
         'pulse-dot': {
           '0%, 100%': { opacity: '1', transform: 'scale(1)' },
           '50%': { opacity: '0.5', transform: 'scale(0.7)' },
+        },
+        'auth-float': {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+        'auth-shimmer': {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
         },
       },
     },
