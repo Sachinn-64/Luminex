@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authErrorMessage } from '@/lib/authErrors';
+import { authErrorMessage, isPopupDismissed } from '@/lib/authErrors';
 import {
   AuthDivider,
   AuthError,
@@ -16,13 +16,14 @@ import {
 } from '@/components/auth/AuthShell';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +37,22 @@ export default function Login() {
       setError(authErrorMessage(err, 'Login failed'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+      navigate('/dashboard');
+    } catch (err: unknown) {
+      if (!isPopupDismissed(err)) {
+        console.error('Google sign-in failed:', err);
+        setError(authErrorMessage(err, 'Google sign-in failed'));
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -88,7 +105,9 @@ export default function Login() {
             Sign in
           </AuthSubmit>
           <AuthDivider>or</AuthDivider>
-          <GoogleButton>Continue with Google</GoogleButton>
+          <GoogleButton onClick={handleGoogle} loading={googleLoading}>
+            {googleLoading ? 'Opening Google…' : 'Continue with Google'}
+          </GoogleButton>
         </div>
 
         <AuthLinks

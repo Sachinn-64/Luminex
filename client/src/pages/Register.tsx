@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type Role } from '../context/AuthContext';
-import { authErrorMessage } from '@/lib/authErrors';
+import { authErrorMessage, isPopupDismissed } from '@/lib/authErrors';
 import {
   AuthDivider,
   AuthError,
@@ -24,7 +24,7 @@ const ROLES: ChoiceOption<Role>[] = [
 ];
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -33,6 +33,7 @@ export default function Register() {
   const [role, setRole] = useState<Role>('user');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +48,22 @@ export default function Register() {
       setError(authErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle(role);
+      navigate('/dashboard');
+    } catch (err: unknown) {
+      if (!isPopupDismissed(err)) {
+        console.error('Google sign-up failed:', err);
+        setError(authErrorMessage(err, 'Google sign-up failed'));
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -106,7 +123,9 @@ export default function Register() {
             Create account
           </AuthSubmit>
           <AuthDivider>or</AuthDivider>
-          <GoogleButton>Continue with Google</GoogleButton>
+          <GoogleButton onClick={handleGoogle} loading={googleLoading}>
+            {googleLoading ? 'Opening Google…' : `Continue with Google as ${ROLES.find((r) => r.value === role)?.label ?? 'Pilgrim'}`}
+          </GoogleButton>
         </div>
 
         <AuthLinks prompt="Medical staff?" links={[{ to: '/doctor-signup', label: 'Join as a doctor' }]} />

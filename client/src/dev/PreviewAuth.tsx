@@ -21,6 +21,7 @@ export default function PreviewAuth({ children }: { children: ReactNode }) {
       loading: false,
       login: async () => {},
       register: async () => {},
+      loginWithGoogle: async () => {},
       logout: async () => {},
     }),
     [role],

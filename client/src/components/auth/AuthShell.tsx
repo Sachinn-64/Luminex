@@ -342,12 +342,23 @@ export function AuthSubmit({
   );
 }
 
-export function GoogleButton({ children }: { children: ReactNode }) {
+export function GoogleButton({
+  children,
+  onClick,
+  loading,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  loading?: boolean;
+}) {
   return (
     <button
       type="button"
-      className="flex h-12 w-full items-center justify-center gap-2.5 border border-white/20 bg-transparent text-[14px] font-medium text-white transition-colors duration-200 hover:border-white/60 hover:bg-white/[0.04]"
+      onClick={onClick}
+      disabled={loading}
+      className="flex h-12 w-full items-center justify-center gap-2.5 border border-white/20 bg-transparent text-[14px] font-medium text-white transition-colors duration-200 hover:border-white/60 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
     >
+      {loading && <Loader2 className="size-4 animate-spin" />}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="size-4" fill="currentColor">
         <path d="M21.35 11.1H12v3.2h5.4c-.5 2.4-2.5 3.7-5.4 3.7a6 6 0 1 1 0-12c1.5 0 2.8.5 3.8 1.5l2.4-2.4A9.3 9.3 0 0 0 12 2.7a9.3 9.3 0 1 0 0 18.6c5.4 0 9-3.8 9-9.1 0-.4 0-.8-.15-1.1z" />
       </svg>
